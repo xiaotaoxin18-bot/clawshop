@@ -1,0 +1,54 @@
+# ======== 依赖 ========
+node_modules/
+.pnp
+.pnp.js
+
+# ======== 环境变量 ========
+.env
+.env.local
+.env.*.local
+
+# ======== 构建输出 ========
+dist/
+build/
+
+# ======== 数据库 (1GB+, 本地数据不提交) ========
+data/pgdata/
+data/pgsql/
+
+# ======== 浏览器采集 ========
+scraper/cookies.json
+scraper/feishu_config.json
+scraper/edge_profile/
+scraper/__pycache__/
+*.pyc
+*.pyo
+__pycache__/
+
+# ======== 日志 ========
+logs/
+*.log
+npm-debug.log*
+
+# ======== 系统文件 ========
+.DS_Store
+Thumbs.db
+
+# ======== IDE ========
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ======== Claude ========
+.claude/
+
+# 后端 CLAUDE.md 包含敏感配置信息
+backend/CLAUDE.md
+
+# ======== 其他 ========
+*.tsbuildinfo
+coverage/
+uploads/*
+!uploads/.gitkeep

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Drizzle migration meta
+drizzle/meta/
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Test coverage
+coverage/
+
+# Misc
+*.tsbuildinfo

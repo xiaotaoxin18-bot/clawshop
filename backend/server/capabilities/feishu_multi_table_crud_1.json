@@ -1,0 +1,879 @@
+{
+  "id": "feishu_multi_table_crud_1",
+  "pluginKey": "@official-plugins/feishu-bitable",
+  "pluginVersion": "1.0.6",
+  "name": "飞书多维表格",
+  "description": "管理飞书多维表格，支持数据的创建、查询、更新、删除",
+  "icon": "https://lf3-static.bytednsdoc.com/obj/eden-cn/fzgeh7nuhfboznulog/bitable.svg",
+  "paramsSchema": {},
+  "formValue": {
+    "tableID": "tbl4AVMXTISsAo8V",
+    "appToken": "Om46bcPJna2qlzsLcyKckFKznuf",
+    "fields": [
+      {
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld6VEGTZ3",
+        "name": "序列"
+      },
+      {
+        "id": "fldSvQobgd",
+        "name": "商家编码",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld2hJbVA9",
+        "name": "期初",
+        "type": 1
+      },
+      {
+        "id": "fldXFKJebM",
+        "readable": true,
+        "writeable": true,
+        "name": "产品入库",
+        "type": 1,
+        "bizType": "Text"
+      },
+      {
+        "writeable": true,
+        "type": 1,
+        "bizType": "Text",
+        "id": "fld74nJhAd",
+        "name": "入仓总数",
+        "readable": true
+      },
+      {
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld2dgvZqC",
+        "name": "出库总数",
+        "type": 1
+      },
+      {
+        "id": "fld1WqJxDB",
+        "name": "调货出库",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "bizType": "Text",
+        "id": "fldKbVmuaZ",
+        "name": "盘点",
+        "type": 1,
+        "readable": true
+      },
+      {
+        "bizType": "Text",
+        "id": "fld7AGTPxc",
+        "name": "库存结余",
+        "type": 1,
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "bizType": "SingleSelect",
+        "enumValues": [
+          "库存情况",
+          "不足",
+          "充足"
+        ],
+        "id": "fld3eML4ih",
+        "name": "库存情况",
+        "type": 3
+      },
+      {
+        "bizType": "Number",
+        "id": "fld7GXD7a2",
+        "name": "出库（2）",
+        "type": 2,
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5MTzpqz",
+        "name": "出库（4）",
+        "type": 2
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5pgEU7z",
+        "name": "出库（22）",
+        "type": 2
+      },
+      {
+        "id": "fld1tHrToZ",
+        "name": "出库（24）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "id": "fld4Y8pLKm",
+        "name": "出库（26）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fldeKTYjb3",
+        "name": "出库（28）",
+        "readable": true
+      },
+      {
+        "id": "fld468LsZh",
+        "name": "出库（15）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "id": "fld5REuS4n",
+        "name": "出库（17）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld2VPih7C",
+        "name": "出库（19）",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "id": "fld3HE2kCy",
+        "name": "出库（21）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld1uTzN8I",
+        "readable": true,
+        "writeable": true,
+        "name": "出库（6）"
+      },
+      {
+        "name": "出库（8）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld3curzby"
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld3Tl97cC",
+        "name": "出库（10）"
+      },
+      {
+        "id": "fldKsYOBkr",
+        "name": "出库（12）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "name": "出库（30）",
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fldq5wff2K"
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5baKlNb",
+        "name": "出库（1）",
+        "type": 2
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld1BEhOTP",
+        "name": "出库（3）"
+      },
+      {
+        "name": "出库（5）",
+        "type": 2,
+        "bizType": "Number",
+        "id": "fldInByTUU",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld1baxEBH",
+        "name": "出库（23）",
+        "type": 2,
+        "bizType": "Number"
+      },
+      {
+        "bizType": "Number",
+        "id": "fld30GnDrz",
+        "name": "出库（25）",
+        "readable": true,
+        "writeable": true,
+        "type": 2
+      },
+      {
+        "id": "fld2YYrkhd",
+        "name": "出库（27）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld1rK6NEI",
+        "name": "出库（29）",
+        "type": 2,
+        "bizType": "Number"
+      },
+      {
+        "name": "出库（13）",
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld1cjtYWi"
+      },
+      {
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld30edgbe",
+        "name": "出库（16）",
+        "type": 2,
+        "readable": true
+      },
+      {
+        "writeable": true,
+        "id": "fldZbsmoKL",
+        "name": "出库（18）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true
+      },
+      {
+        "name": "出库（20）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld1AmeU96"
+      },
+      {
+        "writeable": true,
+        "id": "fld1xF8WRK",
+        "name": "出库（7）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true
+      },
+      {
+        "name": "出库（9）",
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld72Uj4gi"
+      },
+      {
+        "name": "出库（11）",
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld1BgroOw"
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld5vs1zCX",
+        "name": "出库（14）",
+        "type": 2,
+        "bizType": "Number"
+      },
+      {
+        "name": "出库",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld6lAxtHM"
+      },
+      {
+        "id": "fld79PDAg2",
+        "name": "入库（1）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "id": "fld4IVpRf0",
+        "name": "入库（3）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true
+      },
+      {
+        "id": "fldUY5LA37",
+        "name": "入库（5）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "name": "入库（23）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld6WDoGjc"
+      },
+      {
+        "id": "fld7Db287o",
+        "name": "入库（25）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "id": "fldnbFwQoS",
+        "name": "入库（27）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true
+      },
+      {
+        "name": "入库（29）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5p7QoHv"
+      },
+      {
+        "id": "fld1KpYXmD",
+        "name": "入库（15）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld6RPQjHh",
+        "name": "入库（17）"
+      },
+      {
+        "name": "入库（19）",
+        "readable": true,
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld3B30IJp"
+      },
+      {
+        "id": "fld4PMxom5",
+        "name": "入库（21）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "id": "fld6sQeCGJ",
+        "name": "入库（7）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true
+      },
+      {
+        "bizType": "Number",
+        "id": "fld2kW3lbh",
+        "name": "入库（9）",
+        "type": 2,
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "name": "入库（11）",
+        "readable": true,
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld3k46qNq"
+      },
+      {
+        "name": "入库（13）",
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld2JZW4PO",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld6lM3eno",
+        "name": "入库",
+        "type": 2,
+        "readable": true
+      },
+      {
+        "name": "入库（2）",
+        "readable": true,
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld1IkW5uc"
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld1sgXPwu",
+        "name": "入库（4）"
+      },
+      {
+        "name": "入库（6）",
+        "readable": true,
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld2DdBfM3"
+      },
+      {
+        "id": "fld1Npkky4",
+        "name": "入库（24）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "name": "入库（26）",
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld1G4Lrg5",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "id": "fld6kJPtc1",
+        "name": "入库（28）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld4caK7Fx",
+        "name": "入库（30）",
+        "type": 2,
+        "bizType": "Number"
+      },
+      {
+        "id": "fld1z19wwj",
+        "readable": true,
+        "writeable": true,
+        "name": "入库（16）",
+        "type": 2,
+        "bizType": "Number"
+      },
+      {
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld2PLBU64",
+        "name": "入库（18）",
+        "readable": true
+      },
+      {
+        "id": "fld3WMYDFg",
+        "name": "入库（20）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5koSk95",
+        "name": "入库（22）",
+        "type": 2
+      },
+      {
+        "id": "fldwV8E22E",
+        "name": "入库（8）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "name": "入库（10）",
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld4k1HDcQ"
+      },
+      {
+        "id": "fld5ystrP6",
+        "name": "入库（12）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fldUoplTuE",
+        "name": "入库（14）",
+        "type": 2
+      },
+      {
+        "bizType": "Text",
+        "id": "fld1ZAKeF8",
+        "readable": true,
+        "writeable": true,
+        "name": "调货",
+        "type": 1
+      },
+      {
+        "id": "fld43nHNXt",
+        "name": "调货（2）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "id": "fld64TEBLv",
+        "name": "调货（4）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "name": "调货（6）",
+        "readable": true,
+        "writeable": true,
+        "type": 1,
+        "bizType": "Text",
+        "id": "fld4lmF9Hh"
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld5IK4nkX",
+        "name": "调货（22）",
+        "type": 1,
+        "bizType": "Text"
+      },
+      {
+        "type": 1,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Text",
+        "id": "fld3sT3llS",
+        "name": "调货（24）"
+      },
+      {
+        "bizType": "Text",
+        "readable": true,
+        "writeable": true,
+        "id": "fld5zl9gUm",
+        "name": "调货（26）",
+        "type": 1
+      },
+      {
+        "writeable": true,
+        "id": "fld32lG7R9",
+        "name": "调货（28）",
+        "type": 1,
+        "bizType": "Text",
+        "readable": true
+      },
+      {
+        "id": "fldOStimD1",
+        "name": "调货（14）",
+        "type": 1,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Text"
+      },
+      {
+        "type": 1,
+        "bizType": "Text",
+        "id": "fld2f7WpfS",
+        "readable": true,
+        "writeable": true,
+        "name": "调货（16）"
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld1J17DsH",
+        "name": "调货（18）",
+        "type": 1,
+        "bizType": "Text"
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "id": "fld7mCFi54",
+        "name": "调货（20）",
+        "type": 1,
+        "bizType": "Text"
+      },
+      {
+        "readable": true,
+        "writeable": true,
+        "bizType": "Text",
+        "id": "fld6PESeOi",
+        "name": "调货（8）",
+        "type": 1
+      },
+      {
+        "name": "调货（10）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld72B4GkU"
+      },
+      {
+        "name": "调货（12）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fldOBQRwjJ"
+      },
+      {
+        "id": "fld23TA9Mn",
+        "name": "调货（13）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "id": "fld6kb62Z7",
+        "name": "调货（1）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld721qIEQ",
+        "readable": true,
+        "writeable": true,
+        "name": "调货（3）"
+      },
+      {
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld2ZGzv3y",
+        "name": "调货（5）"
+      },
+      {
+        "writeable": true,
+        "type": 2,
+        "bizType": "Number",
+        "id": "fld47mkFMZ",
+        "name": "调货（7）",
+        "readable": true
+      },
+      {
+        "id": "fld3rMrJhW",
+        "name": "调货（23）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld2jsbvdN",
+        "name": "调货（25）"
+      },
+      {
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld4YubJZy",
+        "name": "调货（27）",
+        "type": 2
+      },
+      {
+        "bizType": "Number",
+        "id": "fld52pB8Qo",
+        "name": "调货（29）",
+        "type": 2,
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fldqgH03Av",
+        "name": "调货（15）"
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fldzEUupev",
+        "name": "调货（17）"
+      },
+      {
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fldDl2Ro4T",
+        "name": "调货（19）"
+      },
+      {
+        "name": "调货（21）",
+        "type": 2,
+        "readable": true,
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld1R2JZkP"
+      },
+      {
+        "id": "fld3dN32vp",
+        "name": "调货（9）",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true
+      },
+      {
+        "writeable": true,
+        "bizType": "Number",
+        "id": "fld4ScrzZv",
+        "name": "调货（11）",
+        "type": 2,
+        "readable": true
+      },
+      {
+        "name": "盘点差异",
+        "type": 2,
+        "bizType": "Number",
+        "readable": true,
+        "writeable": true,
+        "id": "fld2vLqZN1"
+      },
+      {
+        "id": "fld4JAB3jx",
+        "name": "入库（20）图片",
+        "type": 17,
+        "bizType": "Attachment",
+        "readable": true,
+        "writeable": false
+      },
+      {
+        "readable": true,
+        "writeable": false,
+        "id": "fld2GrM8Jn",
+        "name": "调货（16）图片",
+        "type": 17,
+        "bizType": "Attachment"
+      },
+      {
+        "writeable": false,
+        "type": 17,
+        "bizType": "Attachment",
+        "id": "fld3Ck4mNH",
+        "name": "调货（18）图片",
+        "readable": true
+      },
+      {
+        "type": 17,
+        "bizType": "Attachment",
+        "id": "fld71t7wjd",
+        "name": "调货（8）图片",
+        "readable": true,
+        "writeable": false
+      }
+    ]
+  },
+  "createdAt": 1772083976539,
+  "updatedAt": 1772087796359,
+  "createdBy": 7596211894906571954
+}

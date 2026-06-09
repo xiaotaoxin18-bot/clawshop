@@ -1,0 +1,42 @@
+[
+  {
+    "id": "3813525542121112025",
+    "date": "2026/05/26",
+    "name": "不沾油双面海绵擦厨房刷锅刷碗神器",
+    "salePrice": 9.9,
+    "salesCount": 9731,
+    "stock": 56,
+    "category": "优秀\n85",
+    "imageUrl": ""
+  },
+  {
+    "id": "3815407525738709418",
+    "date": "2026/05/26",
+    "name": "硫磺洗衣粉强力去污渍除螨抑菌留香家用",
+    "salePrice": 9.9,
+    "salesCount": 655,
+    "stock": 334,
+    "category": "优秀\n87",
+    "imageUrl": ""
+  },
+  {
+    "id": "3820223736783700266",
+    "date": "2026/05/26",
+    "name": "高定洗衣液持久留香去污去渍家庭装",
+    "salePrice": 9.9,
+    "salesCount": 9996,
+    "stock": 3,
+    "category": "优秀\n87",
+    "imageUrl": ""
+  },
+  {
+    "id": "3820224861989634102",
+    "date": "2026/05/26",
+    "name": "强力溶解厨房重油污清洗剂",
+    "salePrice": 9.9,
+    "salesCount": 9992,
+    "stock": 302,
+    "category": "优秀\n87",
+    "imageUrl": ""
+  }
+]

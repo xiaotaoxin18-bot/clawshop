@@ -1,0 +1,755 @@
+#!/usr/bin/env python3
+"""
+抖店运营 CLI — 商品采集、批量操作、每日巡检
+
+Usage:
+    python cli.py collect                       全量采集在售商品
+    python cli.py delist <商品ID1,商品ID2,...>   批量下架商品
+    python cli.py inspect [--with-revenue]      每日巡检
+    python cli.py check-rejected                检查审核驳回
+    python cli.py daily-push --api-url <URL>    采集+巡检+推送后端
+
+全局选项:
+    --headless     无头模式运行
+    --chrome       使用系统 Chrome
+    --edge         使用系统 Edge（推荐）
+    --api-url <URL> 后端 API 地址（daily-push 必需）
+
+环境变量:
+    FEISHU_APP_ID      飞书 App ID（Bitable 同步用）
+    FEISHU_APP_SECRET  飞书 App Secret
+    BROWSER_CHANNEL    chrome 或 msedge（默认 msedge）
+"""
+
+import sys
+import os
+import json
+import time
+import re
+from datetime import datetime
+
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_DIR)
+PROFILE_DIR = os.path.join(PROJECT_DIR, "edge_profile")
+COOKIES_FILE = os.path.join(PROJECT_DIR, "cookies.json")
+
+
+def ensure_playwright():
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("[!] Playwright 未安装，正在安装...")
+        os.system(f"{sys.executable} -m pip install playwright -q")
+        print("[OK] Playwright 安装完成")
+
+
+def _load_env():
+    """读取 .env 文件中的环境变量（补充到系统环境变量中）"""
+    env_file = os.path.join(PROJECT_DIR, "..", "backend", ".env")
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    key, _, val = line.partition("=")
+                    key = key.strip().replace("set ", "", 1)
+                    val = val.strip().strip('"').strip("'")
+                    if key and val and key.startswith("FEISHU_"):
+                        os.environ.setdefault(key, val)
+
+
+def _parse_flags(args):
+    flags = {
+        "headless": "--headless" in args,
+        "chrome": "--chrome" in args,
+        "edge": "--edge" in args,
+        "api_url": None,
+    }
+    remaining = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--api-url" and i + 1 < len(args):
+            flags["api_url"] = args[i + 1]
+            i += 2
+        elif args[i].startswith("--"):
+            i += 1
+        else:
+            remaining.append(args[i])
+            i += 1
+    return flags, remaining
+
+
+def _get_channel(flags):
+    if flags.get("chrome"):
+        return "chrome"
+    if flags.get("edge"):
+        return "msedge"
+    return os.environ.get("BROWSER_CHANNEL") or "msedge"
+
+
+def _load_cookies(context):
+    """从 cookie 文件恢复登录态"""
+    if os.path.exists(COOKIES_FILE):
+        try:
+            with open(COOKIES_FILE, "r", encoding="utf-8") as f:
+                cookies = json.load(f)
+            if cookies:
+                context.add_cookies(cookies)
+                print(f"[cookie] 已恢复 {len(cookies)} 个 cookie")
+        except Exception as e:
+            print(f"[cookie] 恢复失败: {e}")
+
+
+def _save_cookies(context):
+    """保存登录态到 cookie 文件"""
+    try:
+        cookies = context.cookies()
+        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(cookies, f, ensure_ascii=False, indent=2)
+        print(f"[cookie] 已保存 {len(cookies)} 个 cookie")
+    except Exception as e:
+        print(f"[cookie] 保存失败: {e}")
+
+
+def _run_browser(flags, callback):
+    """启动带 profile 的浏览器执行操作，完成后保持打开"""
+    from playwright.sync_api import sync_playwright
+
+    channel = _get_channel(flags)
+    pw = sync_playwright().start()
+    os.makedirs(PROFILE_DIR, exist_ok=True)
+
+    context = pw.chromium.launch_persistent_context(
+        PROFILE_DIR,
+        channel=channel,
+        headless=flags.get("headless", False),
+        viewport={"width": 1280, "height": 800},
+    )
+    _load_cookies(context)
+    page = context.pages[0] if context.pages else context.new_page()
+    page.bring_to_front()
+    return callback(page, context, pw)
+
+
+def _ensure_login(page):
+    """检测登录页，等待用户扫码登录"""
+    try:
+        page.wait_for_load_state('load', timeout=15000)
+    except Exception:
+        pass
+    time.sleep(1)
+
+    try:
+        page.wait_for_function(
+            "() => document.body && document.body.innerText.length > 100",
+            timeout=10000,
+        )
+    except Exception:
+        pass
+
+    try:
+        text = page.evaluate("document.body.innerText")
+    except Exception:
+        time.sleep(2)
+        text = page.evaluate("document.body.innerText")
+    if "发送验证码" in text[:300]:
+        print("=== 请扫码登录抖店（浏览器窗口已打开） ===")
+        page.wait_for_function(
+            "() => !document.body.innerText.includes('发送验证码') && document.body.innerText.length > 800",
+            timeout=600000,
+        )
+        time.sleep(3)
+        print("[OK] 登录成功！")
+    _save_cookies(page.context)
+
+
+def cmd_collect(flags):
+    """全量采集在售商品"""
+    from douyin_operator.collector import ProductCollector
+
+    def cb(page, ctx, pw):
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+        page.wait_for_load_state('load', timeout=15000)
+        _ensure_login(page)
+
+        class FakeBM:
+            def __init__(self, p):
+                self.page = p
+            def get_text(self):
+                return self.page.evaluate("document.body.innerText")
+            def evaluate(self, js, *a):
+                return self.page.evaluate(js) if not a else self.page.evaluate(js, a[0])
+            def navigate(self, url, wait_seconds=2):
+                self.page.goto(url)
+                time.sleep(wait_seconds)
+
+        collector = ProductCollector(FakeBM(page))
+        m = re.search(r"共\s*(\d+)\s*件商品", page.evaluate("document.body.innerText"))
+        total = int(m.group(1)) if m else 0
+        print(f"在售商品: {total}")
+
+        if total > 0:
+            products = collector.collect_all()
+            with open("products.json", "w", encoding="utf-8") as f:
+                json.dump(products, f, ensure_ascii=False, indent=2)
+            print(f"采集完成: {len(products)} 件 → products.json")
+            for p in products[:5]:
+                print(f"  {p['id']}  {p['date']}")
+
+        print("\n[OK] 完成！浏览器保持打开，可手动关掉")
+
+    _run_browser(flags, cb)
+
+
+def cmd_inspect(flags):
+    """每日巡检"""
+    def cb(page, ctx, pw):
+        print("=== 1/3 今日订单 ===")
+        page.goto("https://fxg.jinritemai.com/ffa/morder/order/list")
+        _ensure_login(page)
+        text = page.evaluate("document.body.innerText")
+        o = re.search(r"今日订单[：:]\s*(\d+)", text)
+        print(f"今日订单: {o.group(1) if o else '?'}")
+
+        print("=== 2/3 在售商品 ===")
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+        time.sleep(3)
+        text = page.evaluate("document.body.innerText")
+        p = re.search(r"共\s*(\d+)\s*件商品", text)
+        print(f"在售商品: {p.group(1) if p else '?'}")
+
+        print("=== 3/3 审核驳回 ===")
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?sov_draft_status=3")
+        time.sleep(3)
+        text = page.evaluate("document.body.innerText")
+        r = re.search(r"共\s*(\d+)\s*件商品", text)
+        print(f"审核驳回: {r.group(1) if r else 0}")
+
+        print()
+        print("=" * 50)
+        print(f"== 每日巡检日报 ==")
+        print(f"日期: {datetime.now().strftime('%Y-%m-%d')}")
+        print()
+        print(f"在售商品：{p.group(1) if p else '?'}个 | 今日订单：{o.group(1) if o else '?'}单 | 审核驳回：{r.group(1) if r else 0}个")
+        print("=" * 50)
+        print("\n[OK] 巡检完成，浏览器保持打开")
+
+    _run_browser(flags, cb)
+
+
+def cmd_delist(flags, ids):
+    """批量下架"""
+    def cb(page, ctx, pw):
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+        page.wait_for_load_state('load', timeout=15000)
+        _ensure_login(page)
+
+        page.evaluate("""(value) => {
+            const input = document.querySelector('input[placeholder*="商品名称"]');
+            if (!input) return;
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(input, value);
+            input.dispatchEvent(new Event('input', {bubbles:true}));
+            input.dispatchEvent(new Event('change', {bubbles:true}));
+        }""", ids)
+        time.sleep(0.3)
+        page.get_by_text("查询").first.click()
+        time.sleep(2)
+
+        page.evaluate("document.querySelector('thead input[type=checkbox]')?.click()")
+        time.sleep(0.5)
+
+        page.get_by_text("批量下架").first.click()
+        time.sleep(1)
+
+        page.evaluate("""[...document.querySelectorAll('button')].find(b => b.textContent.trim() === '仍要下架')?.click()""")
+
+        print(f"[OK] 批量下架完成 ({ids})，浏览器保持打开")
+
+    _run_browser(flags, cb)
+
+
+def cmd_check_rejected(flags):
+    """检查审核驳回"""
+    def cb(page, ctx, pw):
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?sov_draft_status=3")
+        _ensure_login(page)
+        m = re.search(r"共\s*(\d+)\s*件商品", page.evaluate("document.body.innerText"))
+        print(f"审核驳回: {int(m.group(1)) if m else 0} 件")
+        print("\n[OK] 检查完成，浏览器保持打开")
+
+    _run_browser(flags, cb)
+
+
+def _sync_feishu(products, snapshot, inbound_products=None, outbound_products=None):
+    """同步数据到飞书多维表格（无配置则跳过）"""
+    feishu_app_id = os.environ.get("FEISHU_APP_ID")
+    feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
+    if not feishu_app_id or not feishu_app_secret:
+        print("[!] 跳过飞书同步（未设置 FEISHU_APP_ID / FEISHU_APP_SECRET）")
+        return
+
+    from douyin_operator.feishu_client import FeishuClient
+    client = FeishuClient(feishu_app_id, feishu_app_secret)
+    config_file = os.path.join(PROJECT_DIR, "feishu_config.json")
+
+    # 读取或创建配置
+    app_token = None
+    summary_table_id = None
+    product_table_id = None
+    if os.path.exists(config_file):
+        with open(config_file, "r") as f:
+            cfg = json.load(f)
+            app_token = cfg.get("app_token")
+            summary_table_id = cfg.get("summary_table_id")
+            product_table_id = cfg.get("product_table_id")
+
+    if not app_token:
+        print("[飞书] 首次运行，创建多维表格...")
+        result = client.create_app("赛博店长-商品库")
+        app_info = result.get("app", result)
+        app_token = app_info["app_token"]
+        # 第一个默认表用作商品明细，再建一个汇总表
+        product_table_id = app_info.get("default_table_id", app_info.get("table_id", ""))
+
+        # 创建第二个表（每日汇总）
+        summary_table_id = client.create_table(app_token, "每日汇总")
+
+        with open(config_file, "w") as f:
+            json.dump({
+                "app_token": app_token,
+                "summary_table_id": summary_table_id,
+                "product_table_id": product_table_id,
+            }, f)
+
+        # --- 商品明细表字段 ---
+        product_fields = [
+            ("商品名称", 1), ("商品ID", 1), ("售价", 2), ("库存", 2),
+            ("累计销量", 2), ("上架日期", 1), ("体验分", 1), ("状态", 1),
+        ]
+        for fname, ftype in product_fields:
+            try: client.create_field(app_token, product_table_id, fname, ftype)
+            except: pass
+
+        # --- 每日汇总表字段 ---
+        summary_fields = [
+            ("采集日期", 1), ("在售商品", 2), ("今日订单", 2), ("审核驳回", 2),
+            ("浏览量", 1), ("成交金额", 1), ("好评率", 1),
+            ("新增商品数", 2), ("下架商品数", 2),
+        ]
+        for fname, ftype in summary_fields:
+            try: client.create_field(app_token, summary_table_id, fname, ftype)
+            except: pass
+
+        print(f"[飞书] 已创建多维表格，app_token={app_token}")
+
+    # ====== 1. 写入商品明细表（每个商品一条记录）======
+    try:
+        primary = client.get_primary_field_name(app_token, product_table_id)
+        existing = client.list_records(app_token, product_table_id)
+        existing_map = {}
+        for rec in existing:
+            val = rec.get("fields", {}).get(primary, "")
+            existing_map[val] = rec["record_id"]
+
+        for p in products:
+            product_name = p.get("name", "")
+            if not product_name:
+                continue
+            fields = {
+                "商品名称": product_name,
+                "商品ID": p.get("id", ""),
+                "售价": float(p.get("salePrice", 0)),
+                "库存": int(p.get("stock", 0)),
+                "累计销量": int(p.get("salesCount", 0)),
+                "上架日期": p.get("date", ""),
+                "体验分": p.get("category", "").split("\n")[0] if p.get("category") else "",
+                "状态": "在售",
+            }
+            if product_name in existing_map:
+                client.update_record(app_token, product_table_id, existing_map[product_name], fields)
+            else:
+                client.create_record(app_token, product_table_id, fields)
+
+        print(f"[飞书] 商品明细已更新 {len(products)} 条")
+    except Exception as e:
+        print(f"[飞书] 商品明细同步失败: {e}")
+
+    # ====== 2. 写入每日汇总表（一天一条）======
+    try:
+        date = snapshot.get("date", datetime.now().strftime("%Y-%m-%d"))
+        summary_fields = {
+            "采集日期": date,
+            "在售商品": len(products),
+            "今日订单": snapshot.get("order_count", 0),
+            "审核驳回": snapshot.get("rejected_count", 0),
+            "新增商品数": len(snapshot.get("new_products", [])),
+            "下架商品数": len(snapshot.get("delisted_products", [])),
+        }
+
+        primary = client.get_primary_field_name(app_token, summary_table_id)
+        existing = client.list_records(app_token, summary_table_id)
+        existing_id = None
+        for rec in existing:
+            if rec.get("fields", {}).get(primary) == date:
+                existing_id = rec["record_id"]
+                break
+
+        if existing_id:
+            client.update_record(app_token, summary_table_id, existing_id, summary_fields)
+        else:
+            client.create_record(app_token, summary_table_id, summary_fields)
+        print(f"[飞书] 每日汇总已更新 {date}")
+    except Exception as e:
+        print(f"[飞书] 每日汇总同步失败: {e}")
+
+    # ====== 3. 写入入库记录表（如有）======
+    if inbound_products:
+        try:
+            table_name = "入库记录"
+            table_id = None
+            for t in client.list_tables(app_token):
+                if t.get("name") == table_name:
+                    table_id = t["table_id"]
+                    break
+            if not table_id:
+                table_id = client.create_table(app_token, table_name)
+                for fname, ftype in [("数量", 2), ("入库时间", 5), ("备注", 1)]:
+                    try: client.create_field(app_token, table_id, fname, ftype)
+                    except: pass
+
+            primary = client.get_primary_field_name(app_token, table_id)
+            for p in inbound_products:
+                client.create_record(app_token, table_id, {
+                    "商品名称": p.get("name", ""),
+                    "数量": int(p.get("stock", 1)),
+                    "入库时间": int(datetime.now().timestamp()),
+                    "备注": "抖店新增商品",
+                })
+            print(f"[飞书] 入库记录已写入 {len(inbound_products)} 条")
+        except Exception as e:
+            print(f"[飞书] 入库记录同步失败: {e}")
+
+    # ====== 4. 写出库记录表（如有）======
+    if outbound_products:
+        try:
+            table_name = "出库记录"
+            table_id = None
+            for t in client.list_tables(app_token):
+                if t.get("name") == table_name:
+                    table_id = t["table_id"]
+                    break
+            if not table_id:
+                table_id = client.create_table(app_token, table_name)
+                for fname, ftype in [("销量变化", 2), ("累计销量", 2), ("出库时间", 5)]:
+                    try: client.create_field(app_token, table_id, fname, ftype)
+                    except: pass
+
+            for p in outbound_products:
+                client.create_record(app_token, table_id, {
+                    "商品名称": p.get("name", ""),
+                    "销量变化": int(p.get("quantity", 0)),
+                    "累计销量": int(p.get("total_sales", 0)),
+                    "出库时间": int(datetime.now().timestamp()),
+                })
+            print(f"[飞书] 出库记录已写入 {len(outbound_products)} 条")
+        except Exception as e:
+            print(f"[飞书] 出库记录同步失败: {e}")
+
+
+def cmd_daily_push(flags):
+    """全量采集 + 巡检 + 推送后端"""
+    import requests
+    from douyin_operator.collector import ProductCollector
+
+    api_url = flags.get("api_url") or os.environ.get("API_URL")
+    if not api_url:
+        print("[ERR] 需要 --api-url 参数或 API_URL 环境变量")
+        return
+
+    api_url = api_url.rstrip("/")
+
+    def cb(page, ctx, pw):
+        try:
+            # 先去商品页登录
+            page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+            page.wait_for_load_state('load', timeout=15000)
+            _ensure_login(page)
+
+            # ---- 采集商品 ----
+            print("\n=== 1/5 采集在售商品 ===")
+            class FakeBM:
+                def __init__(self, p):
+                    self.page = p
+                def get_text(self):
+                    return self.page.evaluate("document.body.innerText")
+                def evaluate(self, js, *a):
+                    return self.page.evaluate(js) if not a else self.page.evaluate(js, a[0])
+                def navigate(self, url, wait_seconds=2):
+                    self.page.goto(url)
+                    time.sleep(wait_seconds)
+
+            collector = ProductCollector(FakeBM(page))
+            m = re.search(r"共\s*(\d+)\s*件商品", page.evaluate("document.body.innerText"))
+            total = int(m.group(1)) if m else 0
+            print(f"在售商品总数: {total}")
+
+            products = collector.collect_all() if total > 0 else []
+            print(f"采集完成: {len(products)} 件")
+
+            # ---- 巡检 ----
+            print("\n=== 2/5 巡检订单 ===")
+            page.goto("https://fxg.jinritemai.com/ffa/morder/order/list")
+            time.sleep(2)
+            text = page.evaluate("document.body.innerText")
+            o = re.search(r"今日订单[：:]\s*(\d+)", text)
+            order_count = int(o.group(1)) if o else 0
+            print(f"今日订单: {order_count}")
+
+            order_statuses = {}
+            for status_key, pattern in [("待发货", r"待发货[：:]?\s*(\d+)"), ("待处理", r"待处理[：:]?\s*(\d+)"), ("退款中", r"退款中[：:]?\s*(\d+)")]:
+                m = re.search(pattern, text)
+                if m:
+                    order_statuses[status_key] = int(m.group(1))
+            if order_statuses:
+                print(f"订单状态: {order_statuses}")
+
+            print("=== 3/5 审核驳回 ===")
+            page.goto("https://fxg.jinritemai.com/ffa/g/list?sov_draft_status=3")
+            time.sleep(2)
+            text = page.evaluate("document.body.innerText")
+            r = re.search(r"共\s*(\d+)\s*件商品", text)
+            rejected_count = int(r.group(1)) if r else 0
+            print(f"审核驳回: {rejected_count}")
+
+            # ---- 经营概览（通过侧边栏点击加载） ----
+            print("=== 4/5 经营概览 ===")
+            page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+            time.sleep(2)
+            try:
+                page.evaluate("""() => {
+                    const items = document.querySelectorAll('span');
+                    for (const el of items) {
+                        if (el.textContent.includes('经营总览') || el.textContent.includes('经营')) {
+                            el.click(); return true;
+                        }
+                    }
+                    return false;
+                }""")
+                time.sleep(8)
+                text = page.evaluate("document.body.innerText")
+                revenue_data = {}
+                for key, pattern in [
+                    ("views", r"浏览量[：:]?\s*([\d,.]+)"),
+                    ("visitors", r"访客[数]?[：:]?\s*([\d,.]+)"),
+                    ("revenue", r"成交金额[：:]?\s*([\d,.]+)"),
+                    ("conversion_rate", r"转化率[：:]?\s*([\d.]+%)"),
+                    ("order_count", r"订单数[：:]?\s*([\d,.]+)"),
+                ]:
+                    m = re.search(pattern, text)
+                    if m:
+                        revenue_data[key] = m.group(1)
+                if revenue_data:
+                    print(f"经营数据: {revenue_data.get('views','?')}浏览 / {revenue_data.get('revenue','?')}成交")
+                else:
+                    print(f"经营概览: 页面字符{len(text)}, 未匹配到指标")
+            except Exception as e:
+                print(f"经营概览采集失败: {e}")
+                revenue_data = {}
+
+            # ---- 商品评价 ----
+            print("=== 5/5 商品评价 ===")
+            page.goto("https://fxg.jinritemai.com/ffa/g/comment")
+            time.sleep(4)
+            text = page.evaluate("document.body.innerText")
+            review_data = {}
+            for key, pattern in [
+                ("total_reviews", r"评价[数]?[：:]?\s*([\d,.]+)"),
+                ("good_rate", r"好评率[：:]?\s*([\d.]+%)"),
+                ("avg_rating", r"评分[：:]?\s*([\d.]+)"),
+            ]:
+                m = re.search(pattern, text)
+                if m:
+                    review_data[key] = m.group(1)
+            if review_data:
+                print(f"评价: {review_data.get('total_reviews','?')}条 / 好评{review_data.get('good_rate','?')}")
+
+            # ---- 对比上次 ----
+            print("\n=== 推送到后端 ===")
+            today = datetime.now().strftime("%Y-%m-%d")
+            last_file = os.path.join(PROJECT_DIR, "last_products.json")
+
+            current_ids = {p["id"] for p in products}
+            previous_products = []
+            if os.path.exists(last_file):
+                with open(last_file, "r", encoding="utf-8") as f:
+                    previous_products = json.load(f)
+            previous_ids = {p["id"] for p in previous_products}
+
+            new_products_list = [p for p in products if p["id"] not in previous_ids] if previous_ids else []
+            delisted_products_list = [p for p in previous_products if p["id"] not in current_ids] if previous_products else []
+
+            print(f"新增商品: {len(new_products_list)}")
+            print(f"下架商品: {len(delisted_products_list)}")
+
+            # ---- 保存本地备份 ----
+            with open(last_file, "w", encoding="utf-8") as f:
+                json.dump(products, f, ensure_ascii=False, indent=2)
+            backup_file = os.path.join(PROJECT_DIR, f"products_{today}.json")
+            with open(backup_file, "w", encoding="utf-8") as f:
+                json.dump(products, f, ensure_ascii=False, indent=2)
+            with open("products.json", "w", encoding="utf-8") as f:
+                json.dump(products, f, ensure_ascii=False, indent=2)
+
+            # ---- 推送后端 ----
+            product_items = [
+                {
+                    "douyin_product_id": p["id"],
+                    "name": p.get("name", ""),
+                    "listed_date": p.get("date", ""),
+                    "status": "active",
+                    "sale_price": p.get("salePrice", 0),
+                    "sales_count": p.get("salesCount", 0),
+                    "stock": p.get("stock", 0),
+                    "category": p.get("category", ""),
+                    "image_url": p.get("imageUrl", ""),
+                }
+                for p in products
+            ]
+
+            delisted_items = [
+                {
+                    "douyin_product_id": p["id"],
+                    "name": p.get("name", ""),
+                    "listed_date": p.get("date", ""),
+                    "status": "delisted",
+                }
+                for p in delisted_products_list
+            ]
+
+            payload = {
+                "snapshot": {
+                    "date": today,
+                    "product_count": len(products),
+                    "order_count": order_count,
+                    "rejected_count": rejected_count,
+                    "order_statuses": order_statuses or None,
+                    "revenue_data": revenue_data or None,
+                    "review_data": review_data or None,
+                },
+                "products": product_items,
+                "changes": {
+                    "new_products": [{
+                        "douyin_product_id": p["id"],
+                        "name": p.get("name", ""),
+                        "listed_date": p.get("date", ""),
+                    } for p in new_products_list],
+                    "delisted_products": delisted_items,
+                },
+            }
+
+            print(f"推送数据: {today} | {len(products)} 商品 | {order_count} 单")
+
+            get_resp = requests.get(api_url, timeout=10)
+            csrf_token = None
+            for cookie in get_resp.cookies:
+                if cookie.name == "suda-csrf-token":
+                    csrf_token = cookie.value
+                    break
+
+            headers = {"Content-Type": "application/json"}
+            if csrf_token:
+                headers["x-suda-csrf-token"] = csrf_token
+                headers["Cookie"] = f"suda-csrf-token={csrf_token}"
+
+            resp = requests.post(
+                f"{api_url}/api/douyin/scrape/push-daily",
+                json=payload,
+                headers=headers,
+                timeout=30,
+            )
+            if resp.status_code >= 400:
+                print(f"[ERR] 推送 HTTP {resp.status_code}: {resp.text[:200]}")
+            else:
+                result = resp.json()
+                if result.get("success"):
+                    print(f"[OK] 推送成功: {result.get('message', '')}")
+                else:
+                    print(f"[ERR] 推送失败: {result.get('message', '')}")
+
+            # ---- 计算销量变化（用于出库记录） ----
+            outbound_list = []
+            if previous_products:
+                prev_sales = {p["id"]: p.get("salesCount", 0) for p in previous_products}
+                for p in products:
+                    pid = p["id"]
+                    old_sales = prev_sales.get(pid, 0)
+                    new_sales = p.get("salesCount", 0)
+                    diff = new_sales - old_sales
+                    if diff > 0:
+                        outbound_list.append({
+                            "name": p.get("name", ""),
+                            "id": pid,
+                            "quantity": diff,
+                            "total_sales": new_sales,
+                        })
+
+            # ---- 飞书同步 ----
+            print("\n=== 飞书同步 ===")
+            _sync_feishu(
+                products,
+                {
+                    "date": today,
+                    "order_count": order_count,
+                    "rejected_count": rejected_count,
+                    "new_products": new_products_list,
+                    "delisted_products": delisted_items,
+                },
+                inbound_products=new_products_list if new_products_list else None,
+                outbound_products=outbound_list if outbound_list else None,
+            )
+
+        except Exception as e:
+            print(f"[ERR] daily-push 执行失败: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            try:
+                ctx.close()
+                pw.stop()
+            except Exception:
+                pass
+
+    _run_browser(flags, cb)
+
+
+def main():
+    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return
+
+    _load_env()
+    ensure_playwright()
+    command = sys.argv[1]
+    cmd_args = sys.argv[2:]
+    flags, remaining = _parse_flags(cmd_args)
+
+    cmds = {
+        "collect": lambda: cmd_collect(flags),
+        "inspect": lambda: cmd_inspect(flags),
+        "delist": lambda: cmd_delist(flags, remaining[0] if remaining else ""),
+        "check-rejected": lambda: cmd_check_rejected(flags),
+        "daily-push": lambda: cmd_daily_push(flags),
+    }
+
+    if command in cmds:
+        cmds[command]()
+    else:
+        print(f"[ERR] 未知命令: {command}")
+        print(__doc__)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,330 @@
+import React, { useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  ShoppingBag,
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  ArrowUpDown,
+  RefreshCw,
+  Clock,
+  List,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { getDouyinLatestSnapshot } from '@/api';
+import type { DouyinDailySnapshot, DouyinSnapshotProduct } from '@shared/api.interface';
+
+const DouyinPage: React.FC = () => {
+  const [latest, setLatest] = useState<DouyinDailySnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const data = await getDouyinLatestSnapshot();
+      setLatest(data);
+    } catch (error) {
+      toast.error('加载抖店数据失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="w-full space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">抖店概览</h1>
+            <p className="text-sm text-muted-foreground mt-1">查看抖店商品采集数据与每日运营概况</p>
+          </div>
+        </div>
+        <Card className="shadow-sm">
+          <CardContent className="flex items-center justify-center py-20">
+            <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!latest) {
+    return (
+      <div className="w-full space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">抖店概览</h1>
+            <p className="text-sm text-muted-foreground mt-1">查看抖店商品采集数据与每日运营概况</p>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={loadData}>
+              <RefreshCw className="w-4 h-4 mr-2" /> 刷新
+            </Button>
+          </div>
+        </div>
+        <Card className="shadow-sm">
+          <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <ShoppingBag className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-lg font-medium">暂无采集数据</p>
+            <p className="text-sm mt-1">请先在终端运行采集器：</p>
+            <code className="mt-3 px-4 py-2 bg-muted rounded-md text-sm font-mono">
+              python cli.py daily-push --api-url http://localhost:3000
+            </code>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const products = latest.allProducts as DouyinSnapshotProduct[] | undefined;
+  const newProducts = latest.newProducts || [];
+  const delistedProducts = latest.delistedProducts || [];
+  const reviews = latest.revenueData?.reviews as Record<string, string> | undefined;
+  const orderStatuses = latest.revenueData?.order_statuses as Record<string, number> | undefined;
+
+  return (
+    <div className="w-full space-y-6">
+      {/* 页面标题栏 */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">抖店概览</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            采集日期: {latest.snapshotDate}
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={loadData}>
+            <RefreshCw className="w-4 h-4 mr-2" /> 刷新数据
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI 指标卡 */}
+      <section className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">在售商品</p>
+                <p className="text-3xl font-bold text-foreground mt-2">{latest.productCount}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-primary/10">
+                <Package className="w-6 h-6 text-primary" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">今日订单</p>
+                <p className="text-3xl font-bold text-foreground mt-2">{latest.orderCount}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-[hsl(142_71%_45%)]/10">
+                <TrendingUp className="w-6 h-6 text-[hsl(142_71%_45%)]" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">审核驳回</p>
+                <p className="text-3xl font-bold text-destructive mt-2">{latest.rejectedCount}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-destructive/10">
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">数据变动</p>
+                <div className="flex items-center gap-3 mt-2">
+                  <span className="text-lg font-bold text-[hsl(142_71%_45%)]">+{newProducts.length}</span>
+                  <span className="text-muted-foreground">/</span>
+                  <span className="text-lg font-bold text-destructive">-{delistedProducts.length}</span>
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-[hsl(38_92%_50%)]/10">
+                <ArrowUpDown className="w-6 h-6 text-[hsl(38_92%_50%)]" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* 商品评价 + 订单状态 */}
+      {(reviews || orderStatuses) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {reviews && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-primary" />
+                  商品评价
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6">
+                  {reviews.total_reviews && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">评价总数</p>
+                      <p className="text-2xl font-bold">{reviews.total_reviews}</p>
+                    </div>
+                  )}
+                  {reviews.good_rate && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">好评率</p>
+                      <p className="text-2xl font-bold text-[hsl(142_71%_45%)]">{reviews.good_rate}</p>
+                    </div>
+                  )}
+                  {reviews.avg_rating && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">评分</p>
+                      <p className="text-2xl font-bold text-[hsl(38_92%_50%)]">{reviews.avg_rating}</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {orderStatuses && (
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-primary" />
+                  订单状态
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-6 flex-wrap">
+                  {Object.entries(orderStatuses).map(([key, val]) => (
+                    <div key={key}>
+                      <p className="text-sm text-muted-foreground">{key}</p>
+                      <p className="text-2xl font-bold">{val}</p>
+                    </div>
+                  ))}
+                  {Object.keys(orderStatuses).length === 0 && (
+                    <p className="text-sm text-muted-foreground">暂无订单状态数据</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* 全部商品列表 */}
+      {products && products.length > 0 && (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <List className="w-5 h-5 text-primary" />
+              全部商品 ({products.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {products.map((p, i) => (
+                <div key={i} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate">{p.name || '未知商品'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      ID: {p.douyin_product_id}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4 shrink-0">
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {p.listed_date}
+                    </span>
+                    <Badge variant="secondary" className="text-xs">
+                      在售
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 新增商品 */}
+      {newProducts.length > 0 && (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Package className="w-5 h-5 text-[hsl(142_71%_45%)]" />
+              新增商品 ({newProducts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {newProducts.map((p, i) => (
+                <div key={i} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate">{p.name || '未知商品'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">ID: {p.douyin_product_id}</p>
+                  </div>
+                  <Badge variant="outline" className="ml-4 shrink-0 text-[hsl(142_71%_45%)] border-[hsl(142_71%_45%)]">
+                    新增
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 下架商品 */}
+      {delistedProducts.length > 0 && (
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              下架商品 ({delistedProducts.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y">
+              {delistedProducts.map((p, i) => (
+                <div key={i} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate">{p.name || '未知商品'}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">ID: {p.douyin_product_id}</p>
+                  </div>
+                  <Badge variant="outline" className="ml-4 shrink-0 text-destructive border-destructive">
+                    已下架
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default DouyinPage;
