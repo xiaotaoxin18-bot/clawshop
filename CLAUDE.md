@@ -1,15 +1,68 @@
 # clawshop 项目文档
 
+## 快速开始（给新人）
+
+### 前置依赖
+- **Node.js** >= 22（[下载](https://nodejs.org/)）
+- **npm** >= 10（安装 Node.js 自带）
+- **PostgreSQL** 16（已内置在 `data/pgsql/`，或[官网下载](https://www.postgresql.org/download/)）
+- **ngrok**（可选，外网访问需要）
+
+### 首次初始化
+```bash
+# 1. 克隆项目到任意目录
+git clone <仓库地址>
+cd clawshop
+
+# 2. 运行初始化脚本（自动安装依赖 + 构建 + 初始化数据库）
+scripts\setup.bat
+
+# 3. 启动项目
+scripts\start-all.bat
+
+# 4. 访问
+#    本地: http://localhost:3000
+```
+
+> `setup.bat` 会引导你完成全部设置，包括创建数据库和导入演示数据。
+
+### 日常启动
+| 场景 | 操作 |
+|------|------|
+| 手动启动 | `scripts\start-all.bat` |
+| 开机自启 | 右键 `scripts\register-task.bat` → 以管理员身份运行 |
+| 停止服务 | `scripts\stop-all.bat` |
+
+### ngrok 配置（外网访问）
+设置环境变量 `NGROK_PATH` 指向 ngrok 可执行文件，或确保 ngrok 在 PATH 中：
+```bash
+set NGROK_PATH=D:\tools\ngrok.exe
+```
+
 ## 目录结构
 
 ```
 D:\clawshop\
-├── backend\       # NestJS 后端 + React 前端
-├── scraper\       # Python 浏览器采集工具
-├── data\          # 数据库文件
-│   ├── pgdata\    # PostgreSQL 数据目录
-│   └── pgsql\     # PostgreSQL 程序
-└── scripts\       # 启动/管理脚本
+├── backend\            # NestJS 后端 + React 前端
+│   ├── .env.example    # 环境变量模板（复制为 .env）
+│   ├── fix_roles.sql   # 数据库角色初始化
+│   ├── seed.sql        # 演示数据
+│   └── scripts\
+│       └── dev.sh      # 开发模式（npm run dev）
+├── scraper\            # Python 浏览器采集工具
+├── data\               # 数据库文件
+│   ├── pgdata\         # PostgreSQL 数据目录（.gitignore 忽略）
+│   └── pgsql\          # PostgreSQL 程序（.gitignore 忽略）
+└── scripts\            # 启动/管理脚本（所有脚本已用相对路径，可放任意目录）
+    ├── start-all.bat   # 一键启动
+    ├── stop-all.bat    # 停止所有
+    ├── startup.bat     # 开机自启（Task Scheduler 调用）
+    ├── setup.bat       # 首次初始化
+    ├── register-task.bat     # 注册开机自启
+    ├── register-autostart.bat # 高级自启注册（含构建）
+    ├── start-db.bat         # 仅启动数据库
+    ├── start-backend.bat    # 仅启动后端
+    └── start-ngrok.bat      # 仅启动 ngrok
 ```
 
 ## 工作关系
@@ -39,26 +92,47 @@ scripts\stop-all.bat
 
 ## 开机自启
 
-| 方式 | 说明 |
-|------|------|
-| `scripts\register-task.bat` | 以管理员身份运行，注册 Task Scheduler 开机自启 |
-| 启动文件夹 `ngrok.bat` | 仅启动 ngrok |
+| 方式 | 触发 | 启动内容 |
+|------|------|---------|
+| `scripts\register-task.bat` | 登录后 30 秒（需管理员权限） | `startup.bat` → DB + 后端 + ngrok |
+| `scripts\startup.bat` | 由 Task Scheduler 调用 | 启动全部 3 个服务 |
+| 启动文件夹 `ngrok.bat` | 登录时 | 仅启动 ngrok（冗余备份） |
 
-开机自启的自动启动顺序：
-1. PostgreSQL（端口 5432）
-2. 后端（生产模式，`node dist/server/main.js`，端口 3000，含前端页面和 API）
-3. ngrok（公网隧道 → 端口 3000）
+开机自启的自动启动顺序（由 `startup.bat` 执行）：
+1. 清理残留的 PostgreSQL 锁文件（防止非正常关机导致启动失败）
+2. PostgreSQL（端口 5432）— 等待 5 秒
+3. 后端（生产模式，`node dist/server/main.js`，端口 3000，含前端页面和 API）— 等待 8 秒
+4. ngrok（公网隧道 → 端口 3000）
+
+> ⚠️ **已知问题**：电脑非正常关机（强制关机/断电）会导致 `data/pgdata/postmaster.pid` 锁文件残留，下次开机 PostgreSQL 无法启动，连锁导致后端也起不来。`startup.bat` 已内置自动清理逻辑，启动数据库前会检查并删除残留的 `postmaster.pid`。
 
 ## 管理脚本
 
 | 脚本 | 功能 |
 |------|------|
+| `scripts\setup.bat` | 首次初始化（安装依赖 + 构建 + 初始化数据库） |
 | `scripts\start-all.bat` | 一键启动所有服务 |
 | `scripts\stop-all.bat` | 停止所有服务 |
-| `scripts\startup.vbs` | 静默启动（由 Task Scheduler 调用） |
+| `scripts\startup.bat` | 开机自启（由 Task Scheduler 调用） |
 | `scripts\register-task.bat` | 注册开机自启（需管理员权限） |
+| `scripts\start-db.bat` | 仅启动 PostgreSQL |
+| `scripts\start-backend.bat` | 仅启动后端 |
+| `scripts\start-ngrok.bat` | 仅启动 ngrok |
 
-## 构建方式
+## 开发模式
+
+修改前端/后端代码后实时生效（无需重复构建）：
+
+```bash
+cd backend
+npm run dev
+# 前端 http://localhost:8080（热更新）
+# 后端 http://localhost:3000（热重载）
+```
+
+> `npm run dev` 由 `scripts/dev.sh` 驱动，自动检查 PostgreSQL、同时启动前后端开发服务器。
+
+## 生产构建
 
 ```bash
 cd backend
@@ -78,10 +152,10 @@ npm run build:server     # 如果改了后端代码
 
 ### 外网访问
 
-通过 ngrok 将本地 3000 端口映射到公网：
+通过 ngrok 将本地 3000 端口映射到公网（需先安装 ngrok 并配置 `NGROK_PATH` 环境变量，或确保在 PATH 中）：
 
 ```bash
-D:\ngrok\ngrok.exe http 3000
+scripts\start-ngrok.bat
 # → https://xxx.ngrok-free.dev
 ```
 
@@ -179,3 +253,4 @@ scraper cli.py daily-push
 - ngrok 免费版每次启动地址会变，飞书网页应用需更新 H5 可信域名并重新发布
 - 采集器运行时会打开浏览器（`--edge`），首次需扫码登录
 - 本机运行，关电脑后飞书网页应用无法访问。如需 24 小时在线需部署到云服务器
+- **非正常关机（强制关机/断电）** 会导致 PostgreSQL 的 `data/pgdata/postmaster.pid` 锁文件残留，下次开机三个服务中可能只有 ngrok 起来。表现为飞书 ERR_FAILED（-2 502）。- `startup.bat` 已内置自动清理逻辑，如遇此情况可手动运行一次 `start-all.bat` 或重启电脑

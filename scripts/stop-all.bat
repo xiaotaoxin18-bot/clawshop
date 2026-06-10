@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
-cd /d D:\clawshop
+cd /d "%~dp0.."
+set "PROJECT_ROOT=%CD%"
 
 echo ========================================
 echo  clawshop - 停止所有服务
@@ -21,9 +22,9 @@ echo.
 
 :: 3. 停止 PostgreSQL
 echo [3/3] 停止 PostgreSQL...
-set PGHOME=D:\clawshop\data\pgsql\pgsql
+set PGHOME=%PROJECT_ROOT%\data\pgsql\pgsql
 set PATH=%PGHOME%\bin;%PATH%
-"%PGHOME%\bin\pg_ctl" -D D:\clawshop\data\pgdata stop 2>nul
+"%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" stop 2>nul
 echo   ✓ PostgreSQL 已停止
 echo.
 

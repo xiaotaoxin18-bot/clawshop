@@ -6,6 +6,14 @@ Set WshShell = CreateObject("WScript.Shell")
 ' 切换到项目目录
 WshShell.CurrentDirectory = "D:\clawshop"
 
+' 清理上次残留的 PostgreSQL 锁文件（非正常关机导致）
+Dim fso
+Set fso = CreateObject("Scripting.FileSystemObject")
+If fso.FileExists("D:\clawshop\data\pgdata\postmaster.pid") Then
+  fso.DeleteFile "D:\clawshop\data\pgdata\postmaster.pid", True
+End If
+Set fso = Nothing
+
 ' 1. 启动 PostgreSQL
 WshShell.Run "cmd /c D:\clawshop\scripts\start-db.bat", 0, False
 

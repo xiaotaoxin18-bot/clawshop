@@ -16,6 +16,7 @@ import ProfilePage from './pages/ProfilePage/ProfilePage';
 
 const RoutesComponent = () => {
   return (
+    
     <Routes>
       <Route element={<Layout />}>
         <Route index element={<DashboardPage />} />
