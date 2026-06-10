@@ -31,47 +31,6 @@
 | **数据库** | PostgreSQL 16 |
 | **公网** | ngrok（映射本地服务到公网） |
 
-## 🚀 快速开始
-
-### 前置条件
-
-- Node.js >= 22
-- Python 3.10+（可选，仅抖店采集需要）
-- ngrok（可选，外网访问需要）
-
-### 首次初始化
-
-```bash
-scripts\setup.bat
-```
-
-自动完成：检查依赖 → npm install → 构建前端后端 → 初始化 PostgreSQL → 安装 Python 依赖
-
-### 启动项目
-
-```bash
-scripts\start-all.bat
-```
-
-访问 http://localhost:3000
-
-### 开发模式
-
-```bash
-cd backend
-npm run dev
-# 前端 http://localhost:8080（热更新）
-# 后端 http://localhost:3000（热重载）
-```
-
-### 数据采集
-
-```bash
-cd scraper
-pip install -r requirements.txt
-python cli.py collect --edge        # 采集抖店商品
-python cli.py daily-push --api-url http://localhost:3000  # 采集+推送数据库
-```
 
 ## 📁 目录结构
 
