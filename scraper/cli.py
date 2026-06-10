@@ -16,8 +16,6 @@ Usage:
     --api-url <URL> 后端 API 地址（daily-push 必需）
 
 环境变量:
-    FEISHU_APP_ID      飞书 App ID（Bitable 同步用）
-    FEISHU_APP_SECRET  飞书 App Secret
     BROWSER_CHANNEL    chrome 或 msedge（默认 msedge）
 """
 
@@ -56,7 +54,7 @@ def _load_env():
                     key, _, val = line.partition("=")
                     key = key.strip().replace("set ", "", 1)
                     val = val.strip().strip('"').strip("'")
-                    if key and val and key.startswith("FEISHU_"):
+                    if key and val:
                         os.environ.setdefault(key, val)
 
 
@@ -282,181 +280,6 @@ def cmd_check_rejected(flags):
 
     _run_browser(flags, cb)
 
-
-def _sync_feishu(products, snapshot, inbound_products=None, outbound_products=None):
-    """同步数据到飞书多维表格（无配置则跳过）"""
-    feishu_app_id = os.environ.get("FEISHU_APP_ID")
-    feishu_app_secret = os.environ.get("FEISHU_APP_SECRET")
-    if not feishu_app_id or not feishu_app_secret:
-        print("[!] 跳过飞书同步（未设置 FEISHU_APP_ID / FEISHU_APP_SECRET）")
-        return
-
-    from douyin_operator.feishu_client import FeishuClient
-    client = FeishuClient(feishu_app_id, feishu_app_secret)
-    config_file = os.path.join(PROJECT_DIR, "feishu_config.json")
-
-    # 读取或创建配置
-    app_token = None
-    summary_table_id = None
-    product_table_id = None
-    if os.path.exists(config_file):
-        with open(config_file, "r") as f:
-            cfg = json.load(f)
-            app_token = cfg.get("app_token")
-            summary_table_id = cfg.get("summary_table_id")
-            product_table_id = cfg.get("product_table_id")
-
-    if not app_token:
-        print("[飞书] 首次运行，创建多维表格...")
-        result = client.create_app("赛博店长-商品库")
-        app_info = result.get("app", result)
-        app_token = app_info["app_token"]
-        # 第一个默认表用作商品明细，再建一个汇总表
-        product_table_id = app_info.get("default_table_id", app_info.get("table_id", ""))
-
-        # 创建第二个表（每日汇总）
-        summary_table_id = client.create_table(app_token, "每日汇总")
-
-        with open(config_file, "w") as f:
-            json.dump({
-                "app_token": app_token,
-                "summary_table_id": summary_table_id,
-                "product_table_id": product_table_id,
-            }, f)
-
-        # --- 商品明细表字段 ---
-        product_fields = [
-            ("商品名称", 1), ("商品ID", 1), ("售价", 2), ("库存", 2),
-            ("累计销量", 2), ("上架日期", 1), ("体验分", 1), ("状态", 1),
-        ]
-        for fname, ftype in product_fields:
-            try: client.create_field(app_token, product_table_id, fname, ftype)
-            except: pass
-
-        # --- 每日汇总表字段 ---
-        summary_fields = [
-            ("采集日期", 1), ("在售商品", 2), ("今日订单", 2), ("审核驳回", 2),
-            ("浏览量", 1), ("成交金额", 1), ("好评率", 1),
-            ("新增商品数", 2), ("下架商品数", 2),
-        ]
-        for fname, ftype in summary_fields:
-            try: client.create_field(app_token, summary_table_id, fname, ftype)
-            except: pass
-
-        print(f"[飞书] 已创建多维表格，app_token={app_token}")
-
-    # ====== 1. 写入商品明细表（每个商品一条记录）======
-    try:
-        primary = client.get_primary_field_name(app_token, product_table_id)
-        existing = client.list_records(app_token, product_table_id)
-        existing_map = {}
-        for rec in existing:
-            val = rec.get("fields", {}).get(primary, "")
-            existing_map[val] = rec["record_id"]
-
-        for p in products:
-            product_name = p.get("name", "")
-            if not product_name:
-                continue
-            fields = {
-                "商品名称": product_name,
-                "商品ID": p.get("id", ""),
-                "售价": float(p.get("salePrice", 0)),
-                "库存": int(p.get("stock", 0)),
-                "累计销量": int(p.get("salesCount", 0)),
-                "上架日期": p.get("date", ""),
-                "体验分": p.get("category", "").split("\n")[0] if p.get("category") else "",
-                "状态": "在售",
-            }
-            if product_name in existing_map:
-                client.update_record(app_token, product_table_id, existing_map[product_name], fields)
-            else:
-                client.create_record(app_token, product_table_id, fields)
-
-        print(f"[飞书] 商品明细已更新 {len(products)} 条")
-    except Exception as e:
-        print(f"[飞书] 商品明细同步失败: {e}")
-
-    # ====== 2. 写入每日汇总表（一天一条）======
-    try:
-        date = snapshot.get("date", datetime.now().strftime("%Y-%m-%d"))
-        summary_fields = {
-            "采集日期": date,
-            "在售商品": len(products),
-            "今日订单": snapshot.get("order_count", 0),
-            "审核驳回": snapshot.get("rejected_count", 0),
-            "新增商品数": len(snapshot.get("new_products", [])),
-            "下架商品数": len(snapshot.get("delisted_products", [])),
-        }
-
-        primary = client.get_primary_field_name(app_token, summary_table_id)
-        existing = client.list_records(app_token, summary_table_id)
-        existing_id = None
-        for rec in existing:
-            if rec.get("fields", {}).get(primary) == date:
-                existing_id = rec["record_id"]
-                break
-
-        if existing_id:
-            client.update_record(app_token, summary_table_id, existing_id, summary_fields)
-        else:
-            client.create_record(app_token, summary_table_id, summary_fields)
-        print(f"[飞书] 每日汇总已更新 {date}")
-    except Exception as e:
-        print(f"[飞书] 每日汇总同步失败: {e}")
-
-    # ====== 3. 写入入库记录表（如有）======
-    if inbound_products:
-        try:
-            table_name = "入库记录"
-            table_id = None
-            for t in client.list_tables(app_token):
-                if t.get("name") == table_name:
-                    table_id = t["table_id"]
-                    break
-            if not table_id:
-                table_id = client.create_table(app_token, table_name)
-                for fname, ftype in [("数量", 2), ("入库时间", 5), ("备注", 1)]:
-                    try: client.create_field(app_token, table_id, fname, ftype)
-                    except: pass
-
-            primary = client.get_primary_field_name(app_token, table_id)
-            for p in inbound_products:
-                client.create_record(app_token, table_id, {
-                    "商品名称": p.get("name", ""),
-                    "数量": int(p.get("stock", 1)),
-                    "入库时间": int(datetime.now().timestamp()),
-                    "备注": "抖店新增商品",
-                })
-            print(f"[飞书] 入库记录已写入 {len(inbound_products)} 条")
-        except Exception as e:
-            print(f"[飞书] 入库记录同步失败: {e}")
-
-    # ====== 4. 写出库记录表（如有）======
-    if outbound_products:
-        try:
-            table_name = "出库记录"
-            table_id = None
-            for t in client.list_tables(app_token):
-                if t.get("name") == table_name:
-                    table_id = t["table_id"]
-                    break
-            if not table_id:
-                table_id = client.create_table(app_token, table_name)
-                for fname, ftype in [("销量变化", 2), ("累计销量", 2), ("出库时间", 5)]:
-                    try: client.create_field(app_token, table_id, fname, ftype)
-                    except: pass
-
-            for p in outbound_products:
-                client.create_record(app_token, table_id, {
-                    "商品名称": p.get("name", ""),
-                    "销量变化": int(p.get("quantity", 0)),
-                    "累计销量": int(p.get("total_sales", 0)),
-                    "出库时间": int(datetime.now().timestamp()),
-                })
-            print(f"[飞书] 出库记录已写入 {len(outbound_products)} 条")
-        except Exception as e:
-            print(f"[飞书] 出库记录同步失败: {e}")
 
 
 def cmd_daily_push(flags):
@@ -695,21 +518,6 @@ def cmd_daily_push(flags):
                             "quantity": diff,
                             "total_sales": new_sales,
                         })
-
-            # ---- 飞书同步 ----
-            print("\n=== 飞书同步 ===")
-            _sync_feishu(
-                products,
-                {
-                    "date": today,
-                    "order_count": order_count,
-                    "rejected_count": rejected_count,
-                    "new_products": new_products_list,
-                    "delisted_products": delisted_items,
-                },
-                inbound_products=new_products_list if new_products_list else None,
-                outbound_products=outbound_list if outbound_list else None,
-            )
 
         except Exception as e:
             print(f"[ERR] daily-push 执行失败: {e}")

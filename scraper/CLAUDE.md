@@ -63,26 +63,6 @@ schtasks /Create /TN "clawshop-daily-push-pm" /TR "cmd /c cd /d D:\clawshop\scra
 | 商品评价 | 评价总数、好评率 | 每日快照 |
 | 经营概览 | 浏览量/访客数/成交金额（部分账号不可用） | 抖店看板 |
 
-## 飞书同步
-
-设置环境变量自动启用飞书 Bitable 同步：
-
-```bash
-set FEISHU_APP_ID=cli_xxxxx
-set FEISHU_APP_SECRET=xxxxx
-```
-
-首次运行自动创建「赛博店长-商品库」多维表格，含 4 个子表：
-
-| 表名 | 写入时机 | 字段 |
-|------|---------|------|
-| 商品明细 | 每次采集更新 | 商品名称/ID/售价/库存/累计销量/上架日期/体验分/状态 |
-| 每日汇总 | 每天一条 | 采集日期/在售商品/今日订单/审核驳回/新增商品数/下架商品数 |
-| 入库记录 | 新商品时写入 | 商品名称/数量/入库时间 |
-| 出库记录 | 销量增加时写入 | 商品名称/销量变化/累计销量/出库时间 |
-
-飞书配置保存在 `feishu_config.json`（自动生成）。
-
 ## 登录态持久化
 
 登录态通过两层保存：
@@ -95,10 +75,9 @@ set FEISHU_APP_SECRET=xxxxx
 
 ```
 scraper/
-├── cli.py                  # CLI 入口（所有命令 + 飞书同步）
+├── cli.py                  # CLI 入口（所有命令）
 ├── requirements.txt        # Python 依赖
 ├── cookies.json            # 登录态 cookie 备份（自动生成）
-├── feishu_config.json      # 飞书配置（自动生成）
 ├── products.json           # 最近一次采集结果
 ├── last_products.json      # 上次采集结果（用于对比变化）
 ├── edge_profile/           # 浏览器登录态（自动生成）
@@ -107,7 +86,6 @@ scraper/
 │   ├── collector.py        # 全量商品采集（含分页/虚拟滚动）
 │   ├── batch_ops.py        # 批量上下架操作
 │   ├── inspector.py        # 每日巡检（订单/评价/经营概览）
-│   ├── feishu_client.py    # 飞书 API 客户端
 │   └── utils.py            # 工具函数（价格解析/日期处理）
 ├── scripts/                # JS 参考脚本
 └── references/             # 参考文档
