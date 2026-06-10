@@ -141,7 +141,7 @@ clawshop/
 |------|------|--------|
 | `SUDA_DATABASE_URL` | PostgreSQL 连接串 | `postgresql://appuser:...` |
 | `FORCE_AUTHN_INNERAPI_DOMAIN` | 飞书平台基础域名 | `localhost:3000` |
-| `ADMIN_CLEAR_PASSWORD` | 一键清除数据密码 | `admin123` |
+| `ADMIN_CLEAR_PASSWORD` | 一键清除数据密码 |
 | `NGROK_PATH` | ngrok 路径（系统环境变量） | `ngrok`（默认 PATH） |
 
 ## 📄 许可证
