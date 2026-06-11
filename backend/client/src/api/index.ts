@@ -986,3 +986,51 @@ export async function getDouyinSnapshots(page: number = 1, pageSize: number = 20
     throw error;
   }
 }
+
+/** 手动触发采集 */
+export async function triggerDouyinScrape(shopId?: string): Promise<{ success: boolean; message: string; task_id?: string }> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/douyin/scrape/trigger',
+      method: 'POST',
+      data: { shop_id: shopId || undefined },
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('触发采集失败', error);
+    throw error;
+  }
+}
+
+/** 获取店铺列表 */
+export async function getShops(): Promise<{ shop_id: string; shop_name: string; created_at: string }[]> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/douyin/shops',
+      method: 'GET',
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('获取店铺列表失败', error);
+    return [];
+  }
+}
+
+/** 添加店铺 */
+export async function addShop(shopId: string, shopName?: string): Promise<{ shop_id: string; shop_name: string; created_at: string }> {
+  const response = await axiosForBackend({
+    url: '/api/douyin/shops',
+    method: 'POST',
+    data: { shop_id: shopId, shop_name: shopName },
+  });
+  return response.data;
+}
+
+/** 删除店铺 */
+export async function deleteShop(shopId: string): Promise<{ success: boolean; message: string }> {
+  const response = await axiosForBackend({
+    url: `/api/douyin/shops/${shopId}`,
+    method: 'DELETE',
+  });
+  return response.data;
+}

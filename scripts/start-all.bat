@@ -13,7 +13,21 @@ echo [1/3] 启动 PostgreSQL...
 set PGHOME=%PROJECT_ROOT%\data\pgsql\pgsql
 set PATH=%PGHOME%\bin;%PATH%
 "%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" -l "%PROJECT_ROOT%\data\pgdata\logfile" start 2>nul
-echo   ✓ PostgreSQL 已启动 (端口 5432)
+
+rem ---- 等待 PostgreSQL 真正就绪 ----
+setlocal enabledelayedexpansion
+set "PG_READY="
+for /l %%i in (1,1,30) do (
+    "%PGHOME%\bin\pg_isready" -q >nul 2>&1 && set "PG_READY=1" && goto PGR_OK
+    ping -n 2 127.0.0.1 >nul
+)
+:PGR_OK
+if defined PG_READY (
+    echo   ✓ PostgreSQL 已启动 (端口 5432)
+) else (
+    echo   ⚠ PostgreSQL 未完全就绪，继续启动后端...
+)
+endlocal
 echo.
 
 :: 2. 启动后端（生产模式，内置前端页面）

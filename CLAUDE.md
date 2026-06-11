@@ -36,7 +36,7 @@ scripts\start-all.bat
 ### ngrok 配置（外网访问）
 设置环境变量 `NGROK_PATH` 指向 ngrok 可执行文件，或确保 ngrok 在 PATH 中：
 ```bash
-set NGROK_PATH=D:\tools\ngrok.exe
+set NGROK_PATH=D:\ngrok\ngrok.exe
 ```
 
 ## 目录结构
@@ -100,11 +100,13 @@ scripts\stop-all.bat
 
 开机自启的自动启动顺序（由 `startup.bat` 执行）：
 1. 清理残留的 PostgreSQL 锁文件（防止非正常关机导致启动失败）
-2. PostgreSQL（端口 5432）— 等待 5 秒
+2. PostgreSQL（端口 5432）— 用 `pg_isready` 轮询等待真正就绪（最长 60 秒）
 3. 后端（生产模式，`node dist/server/main.js`，端口 3000，含前端页面和 API）— 等待 8 秒
 4. ngrok（公网隧道 → 端口 3000）
 
 > ⚠️ **已知问题**：电脑非正常关机（强制关机/断电）会导致 `data/pgdata/postmaster.pid` 锁文件残留，下次开机 PostgreSQL 无法启动，连锁导致后端也起不来。`startup.bat` 已内置自动清理逻辑，启动数据库前会检查并删除残留的 `postmaster.pid`。
+>
+> 另外，PostgreSQL 异常崩溃后恢复可能耗时较长（30 秒以上）。2026-06-11 修复：启动脚本已从固定等待 5 秒改为 `pg_isready` 轮询，最多等 60 秒，确保 PostgreSQL 完全就绪后才启动后端。
 
 ## 管理脚本
 
@@ -182,13 +184,13 @@ ngrok 免费版每次重启地址会变，需要在飞书开放平台更新：
 ## 采集流程
 
 ```
-scraper cli.py daily-push
+scraper cli.py daily-push [--shop-id <店铺ID>]
   → 采集抖店在售商品（名称/ID/售价/库存/销量/体验分）
   → 巡检订单数/驳回数/订单状态
   → 采集商品评价（总数/好评率）
   → 对比上次数据找出新增/下架/销量变化
-  → POST /api/douyin/scrape/push-daily
-  → backend 写入 PostgreSQL
+  → POST /api/douyin/scrape/push-daily  （携带 shop_id）
+  → backend 写入 PostgreSQL（按 shop_id 隔离）
        ├── product（商品表，同步实时数据，含售价/销量/库存）
        ├── inbound_record（新商品 → 自动入库）
        ├── outbound_record（销量变化 → 自动出库）
@@ -199,12 +201,12 @@ scraper cli.py daily-push
 ## 导航结构
 
 ```
-📊 抖店看板      ← 全局 KPI 总览（实时数据）
+📊 抖店看板      ← 全局 KPI 总览（含商品名称分布、店铺分布图表）
 📦 商品管理       ← 抖店真实商品（售价/销量/库存，可删除）
 ⬇ 入库管理       ← 新商品自动生成入库记录
 ⬆ 出库管理       ← 销量变化自动生成出库记录
 📈 经营数据       ← 销量趋势分析
-🛍 每日快照       ← 采集详情/评价/订单状态
+🛍 抖店概览       ← 采集详情/评价/订单状态 + 手动采集 + 店铺管理
 🔔 预警中心       ← 库存预警
 
 系统设置
@@ -217,20 +219,163 @@ scraper cli.py daily-push
 | 任务名 | 触发 | 动作 |
 |--------|------|------|
 | `clawshop-startup` | 用户登录（延迟30秒） | 启动 DB + 后端 + ngrok |
-| `clawshop-daily-push-am` | 每天 09:00 | 采集抖店 → 推后端 → 写飞书 |
+| `clawshop-daily-push-am` | 每天 09:00 | 采集抖店 → 推后端 |
 | `clawshop-daily-push-pm` | 每天 21:00 | 同上（第二次） |
 | 启动文件夹 ngrok.bat | 用户登录 | 后台启动 ngrok 隧道 |
+
+> 多店铺场景：定时任务需要为每个店铺分别注册，或手动触发采集。
 
 ## 登录态
 
 - `scraper/edge_profile/` — 浏览器完整 profile
-- `scraper/cookies.json` — 45 个抖店 cookie（自动保存/恢复）
+- `scraper/cookies.json` — 默认店铺 cookie（自动保存/恢复）
+- `scraper/cookies_{shop_id}.json` — 多店铺时每个店铺独立的 cookie
 - 首次运行需要扫码登录一次，后续自动恢复
+
+## 手动触发采集
+
+前端「抖店概览」页有 **手动采集** 按钮，点击后后端通过 `child_process` 调用 Python 采集器：
+
+```
+前端按钮 → POST /api/douyin/scrape/trigger { shop_id }
+         → 后端 spawn python cli.py daily-push --api-url ...
+         → 浏览器自动打开执行采集
+         → 采集完成后数据自动推送到后端
+         → 前端 10 秒后自动刷新
+```
+
+## 店铺管理
+
+在「抖店概览」页点击齿轮图标打开店铺管理弹窗：
+
+- **添加店铺** — 输入店铺 ID 和名称，创建独立采集配置
+- **删除店铺** — 级联删除该店铺的所有商品、入库/出库/预警记录和快照
+- **选择店铺** — 下拉框选择目标店铺后点击"手动采集"
+
+每个店铺的数据完全隔离：
+
+| 维度 | 隔离方式 |
+|------|---------|
+| 采集器 | 独立 `cookies_{shop_id}.json` + `products_{shop_id}.json` |
+| 快照 | `(shop_id, date)` 唯一键，同一天不同店铺各自一条记录 |
+| 商品 | 按 `(shop_id, douyin_product_id)` 匹配，不同店铺同 ID 不冲突 |
+| 入库/出库/预警 | 都带 `shop_id` 字段 |
 
 ## 一键清除数据
 
 在「个人管理」页底部，密码验证后清除所有数据（商品/入库/出库/预警/快照）。
 默认密码 `admin123`，可在 `.env` 中修改 `ADMIN_CLEAR_PASSWORD`。
+
+## 1688 选品铺货整合（规划中）
+
+### 背景
+
+[1688-shopkeeper](https://github.com/next-1688/1688-shopkeeper) 是 1688 官方开源的 Claw Skill，提供 1688 选品 + 一键铺货（抖店/拼多多/小红书/淘宝）能力。将其与 clawshop 整合可形成完整电商自动化链路：
+
+```
+1688 货源（1688-shopkeeper） → 铺到抖店 → clawshop 运营管理
+```
+
+### 架构方案
+
+推荐 **CLI 桥接 + API 网关** 组合方案，分三阶段实施：
+
+#### Phase 1：CLI 桥接（scraper/bridge/）
+
+在 `scraper/` 下新增 `bridge/` 目录，通过 subprocess 调用 1688-shopkeeper CLI：
+
+```
+scraper/bridge/
+├── __init__.py
+├── alibaba.py          # 封装 subprocess 调用 1688-shopkeeper 的命令
+├── sync.py             # 将铺货结果 POST 到 backend API（写入 product/inbound 表）
+└── cli.py              # 统一桥接入口
+```
+
+```bash
+# 示例用法
+python bridge/cli.py search "夏季连衣裙" --channel douyin
+python bridge/cli.py publish --shop-code CODE --data-id ID --sync
+```
+
+**前置条件：** 本地安装 1688-shopkeeper，配置 `ALI_1688_AK` 环境变量。
+
+#### Phase 2：API 网关（backend alibaba 模块）
+
+backend 新增 `alibaba` 模块，将 1688 CLI 封装为 REST API：
+
+```
+backend/server/modules/alibaba/
+├── alibaba.module.ts        # NestJS 模块声明
+├── alibaba.controller.ts    # REST API 路由
+├── alibaba.service.ts       # 调用 Python CLI（child_process）
+└── schemas/                 # 请求/响应 DTO
+```
+
+前端新增页面：
+
+```
+backend/client/src/pages/AlibabaPage/
+├── index.tsx                # 1688 选品页主入口
+├── SearchPanel.tsx          # 搜索 + 结果列表
+├── ProductDetail.tsx        # 商品详情
+├── PublishDialog.tsx        # 铺货弹窗（选择目标店铺）
+└── TrendPanel.tsx           # 商机趋势
+```
+
+**铺货成功后的自动流程：**
+```
+publish → 成功 → POST /api/alibaba/publish-callback
+  → 自动 INSERT product (name, douyin_product_id, sale_price, status='active')
+  → 自动 INSERT inbound_record（入库记录）
+  → 自动 INSERT douyin_daily_snapshot（快照）
+  → 下次 scraper 采集时已知该商品，直接追踪销量变化
+```
+
+#### Phase 3：事件驱动（可选增强）
+
+引入简单事件机制，消除数据空窗期：
+
+```
+publish 成功 → EventEmitter
+  ├─→ 入库（即时写入 product/inbound 表）
+  ├─→ 通知 scraper 立即采集该商品（建立销量基线）
+  └─→ Push 通知（看板提示有新商品）
+```
+
+### 整合数据流
+
+```
+1688-shopkeeper CLI             clawshop
+═══════════════════             ═══════════
+search ──────────→ bridge/alibaba.py ─→ 返回搜索结果
+publish ─────────→ bridge/alibaba.py ─→ POST /api/alibaba/publish
+                                              │
+               bridge/sync.py ←───────────────┘
+                      │
+                      ├── product 表（新增商品）
+                      ├── inbound_record（入库）
+                      └── douyin_daily_snapshot（快照）
+                            
+定时采集（daily-push）  →  发现已有该商品 → 追踪销量/库存变化
+                      →  自动出库/预警
+```
+
+### 定时任务扩展
+
+| 任务 | 触发 | 说明 |
+|------|------|------|
+| clawshop-daily-push-am | 09:00 | 采集抖店（含 1688 铺货商品） |
+| clawshop-daily-push-pm | 21:00 | 同上 |
+| clawshop-1688-search   | 08:00（可选） | 自动选品策略 |
+| clawshop-1688-publish  | 08:30（可选） | 自动铺货 |
+
+### 依赖关系
+
+- 需安装 1688-shopkeeper（`git clone` + 配置 `ALI_1688_AK`）
+- 需 1688 AI 版 APP 获取 AK
+- bridge 模块依赖 Python 3 + requests 库
+- backend alibaba 模块通过 `child_process.exec` 调用 Python CLI
 
 ## 注意事项
 
@@ -240,4 +385,7 @@ scraper cli.py daily-push
 - ngrok 免费版每次启动地址会变，飞书网页应用需更新 H5 可信域名并重新发布
 - 采集器运行时会打开浏览器（`--edge`），首次需扫码登录
 - 本机运行，关电脑后飞书网页应用无法访问。如需 24 小时在线需部署到云服务器
-- **非正常关机（强制关机/断电）** 会导致 PostgreSQL 的 `data/pgdata/postmaster.pid` 锁文件残留，下次开机三个服务中可能只有 ngrok 起来。表现为飞书 ERR_FAILED（-2 502）。- `startup.bat` 已内置自动清理逻辑，如遇此情况可手动运行一次 `start-all.bat` 或重启电脑
+- **非正常关机（强制关机/断电）** 会导致 PostgreSQL 的 `data/pgdata/postmaster.pid` 锁文件残留，下次开机三个服务中可能只有 ngrok 起来。表现为飞书 ERR_FAILED（-2 502）。`startup.bat` 已内置自动清理逻辑，如遇此情况可手动运行一次 `start-all.bat` 或重启电脑
+- **ERR_NGROK_3200**：通过 ngrok 域名访问时如果看到这个错误，说明后端没启动（ngrok 隧道活着但代理不到 localhost:3000）。先检查 `localhost:3000` 能否打开，若不能则运行 `scripts\start-all.bat` 启动后端
+- **首次部署需要运行数据库迁移**：`drizzle/0001_douyin_tables.sql` 创建抖店相关表（`douyin_config`、`douyin_order_sync`、`douyin_sync_log`），创建后需关闭 RLS：`ALTER TABLE douyin_config DISABLE ROW LEVEL SECURITY;`（以及另外两张表）
+- **已有商品无 shop_id**：2026-06-11 之前采集的商品没有 `shop_id` 字段，不会出现在按店铺分布图表中。重新采集一次即可

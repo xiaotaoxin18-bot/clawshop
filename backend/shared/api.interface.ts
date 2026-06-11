@@ -643,6 +643,8 @@ export interface DashboardStatistics {
   todayInbound: number;
   todayOutbound: number;
   categoryDistribution: CategoryStats[];
+  nameDistribution: { name: string; count: number; value: number }[];
+  shopDistribution: { shopId: string; count: number; value: number }[];
   warehouseDistribution: CategoryStats[];
 }
 

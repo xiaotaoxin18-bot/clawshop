@@ -74,20 +74,22 @@ const DashboardPage: React.FC = () => {
       formatter: '{b}: {c} 件商品 ({d}%)',
     },
     legend: {
-      orient: 'vertical',
-      right: '5%',
-      top: 'center',
-      textStyle: { color: '#64748b' },
+      orient: 'horizontal',
+      bottom: 0,
+      left: 'center',
+      textStyle: { color: '#64748b', fontSize: 11 },
+      itemWidth: 12,
+      itemHeight: 12,
     },
     series: [
       {
         type: 'pie',
-        radius: ['45%', '70%'],
-        center: ['35%', '50%'],
-        avoidLabelOverlap: false,
+        radius: ['40%', '60%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
         label: { show: false },
         emphasis: {
-          label: { show: false },
+          label: { show: true, fontSize: 13, fontWeight: 'bold' },
         },
         labelLine: { show: false },
         data: statistics.categoryDistribution.map(item => ({
@@ -106,24 +108,93 @@ const DashboardPage: React.FC = () => {
       formatter: '{b}: {c} 件商品 ({d}%)',
     },
     legend: {
-      orient: 'vertical',
-      right: '5%',
-      top: 'center',
-      textStyle: { color: '#64748b' },
+      orient: 'horizontal',
+      bottom: 0,
+      left: 'center',
+      textStyle: { color: '#64748b', fontSize: 11 },
+      itemWidth: 12,
+      itemHeight: 12,
     },
     series: [
       {
         type: 'pie',
-        radius: ['45%', '70%'],
-        center: ['35%', '50%'],
-        avoidLabelOverlap: false,
+        radius: ['40%', '60%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
         label: { show: false },
         emphasis: {
-          label: { show: false },
+          label: { show: true, fontSize: 13, fontWeight: 'bold' },
         },
         labelLine: { show: false },
         data: statistics.warehouseDistribution.map(item => ({
           name: item.category,
+          value: item.count,
+        })),
+        color: ['#3b82f6', '#14b8a6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#10b981'],
+      },
+    ],
+  } : {};
+
+  // 按商品名称分布图表配置（跨店铺同名商品分布）
+  const namePieOption = statistics ? {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} 店在售 ({d}%)',
+    },
+    legend: {
+      orient: 'horizontal',
+      bottom: 0,
+      left: 'center',
+      textStyle: { color: '#64748b', fontSize: 11 },
+      itemWidth: 12,
+      itemHeight: 12,
+    },
+    grid: {
+      containLabel: true,
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '60%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
+        labelLine: { show: false },
+        data: (statistics.nameDistribution || []).map(item => ({
+          name: item.name.length > 12 ? item.name.slice(0, 12) + '...' : item.name,
+          value: item.count,
+        })),
+        color: ['#6366f1', '#06b6d4', '#84cc16', '#f97316', '#e11d48', '#a855f7', '#14b8a6'],
+      },
+    ],
+  } : {};
+
+  // 按店铺分布图表配置
+  const shopPieOption = statistics ? {
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c} 件商品 ({d}%)',
+    },
+    legend: {
+      orient: 'horizontal',
+      bottom: 0,
+      left: 'center',
+      textStyle: { color: '#64748b', fontSize: 11 },
+      itemWidth: 12,
+      itemHeight: 12,
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '60%'],
+        center: ['50%', '45%'],
+        avoidLabelOverlap: true,
+        label: { show: false },
+        emphasis: { label: { show: true, fontSize: 13, fontWeight: 'bold' } },
+        labelLine: { show: false },
+        data: (statistics.shopDistribution || []).map(item => ({
+          name: item.shopId === '__default__' ? '默认店铺' : item.shopId,
           value: item.count,
         })),
         color: ['#3b82f6', '#14b8a6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#10b981'],
@@ -302,6 +373,29 @@ const DashboardPage: React.FC = () => {
         <Card className="shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <ShoppingBag className="w-5 h-5 text-violet-500" />
+              按商品名称分布
+            </CardTitle>
+            <p className="text-xs text-muted-foreground font-normal">同名商品在不同店铺的分布</p>
+          </CardHeader>
+          <CardContent>
+            {statistics.nameDistribution?.length > 0 ? (
+              <ReactECharts
+                option={namePieOption}
+                style={{ height: '300px' }}
+                theme="default"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                暂无数据
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
               <Warehouse className="w-5 h-5 text-accent" />
               按仓库分布
             </CardTitle>
@@ -316,6 +410,28 @@ const DashboardPage: React.FC = () => {
             ) : (
               <div className="flex items-center justify-center h-[300px] text-muted-foreground">
                 暂无仓库数据
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Archive className="w-5 h-5 text-cyan-500" />
+              按店铺分布
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {statistics.shopDistribution?.length > 0 ? (
+              <ReactECharts
+                option={shopPieOption}
+                style={{ height: '300px' }}
+                theme="default"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                暂无店铺数据
               </div>
             )}
           </CardContent>

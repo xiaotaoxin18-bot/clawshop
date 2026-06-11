@@ -43,7 +43,7 @@ const navItems = [
   { path: '/inbound', label: '入库管理', icon: ArrowDownLeft },
   { path: '/outbound', label: '出库管理', icon: ArrowUpRight },
   { path: '/analytics', label: '经营数据', icon: TrendingUp },
-  { path: '/douyin', label: '每日快照', icon: ShoppingBag },
+  { path: '/douyin', label: '抖店概览', icon: ShoppingBag },
   { path: '/alerts', label: '预警中心', icon: ShieldAlert },
 ];
 

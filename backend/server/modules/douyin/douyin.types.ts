@@ -151,6 +151,8 @@ export interface ScrapeChanges {
 
 /** 采集器推送的日快照数据 */
 export interface DailyPushPayload {
+  shop_id?: string;
+  shop_name?: string;
   snapshot: {
     date: string;
     product_count: number;
@@ -162,6 +164,31 @@ export interface DailyPushPayload {
   };
   products: ScrapeProductItem[];
   changes: ScrapeChanges;
+}
+
+/** 手动触发采集请求 */
+export interface TriggerScrapeRequest {
+  shop_id?: string;
+}
+
+/** 手动触发采集响应 */
+export interface TriggerScrapeResponse {
+  success: boolean;
+  message: string;
+  task_id?: string;
+}
+
+/** 店铺配置 */
+export interface ShopInfo {
+  shop_id: string;
+  shop_name: string;
+  created_at: string;
+}
+
+/** 添加店铺请求 */
+export interface AddShopRequest {
+  shop_id: string;
+  shop_name?: string;
 }
 
 /** 日快照响应 */

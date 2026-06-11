@@ -18,8 +18,11 @@ data/pgsql/
 
 # ======== 浏览器采集 ========
 scraper/cookies.json
+scraper/cookies_*.json
 scraper/feishu_config.json
 scraper/edge_profile/
+scraper/products*.json
+scraper/last_products*.json
 scraper/__pycache__/
 *.pyc
 *.pyo

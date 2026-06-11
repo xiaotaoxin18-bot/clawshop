@@ -86,13 +86,43 @@ clawshop/
 前端看板 ← 查看数据
 ```
 
-## ⏰ 定时任务
+## 🔗 未来规划：与 1688 选品铺货打通
 
-| 任务 | 触发 | 动作 |
+计划将 [1688-shopkeeper](https://github.com/next-1688/1688-shopkeeper)（1688 官方开源的选品铺货 Skill）与 clawshop 整合，形成"1688 选品 → 铺货到抖店 → clawshop 自动运营管理"的完整闭环。
+
+### 整合数据流（规划中）
+
+```
+1688 选品（1688-shopkeeper search）
+  → 选择货源
+  → 一键铺货到抖店（1688-shopkeeper publish）
+  → 铺货结果同步到 clawshop bridge
+  → 自动写入 product 表 + 生成 inbound_record
+  → clawshop 定时采集时发现该商品 → 追踪销量变化
+  → 自动出库/预警/快照
+
+Web UI 端：
+  📦 商品管理        ← 新增"来自1688"标签
+  🆕 1688 选品页     ← 新增页面，嵌入搜索/铺货/趋势功能
+```
+
+### 实施路线（三阶段）
+
+| 阶段 | 内容 | 核心价值 |
+|:----:|------|---------|
+| **Phase 1** | `scraper/bridge/` CLI 桥接，调用 1688 CLI 并同步结果到后端 | 快速打通，手工可操作 |
+| **Phase 2** | backend 新增 `alibaba` 模块 + Web UI「1688 选品」页面 | 一站式 UI 操作 |
+| **Phase 3** | 事件驱动：铺货成功 → 自动触发采集 → 出入库 | 全自动化闭环 |
+
+### 涉及新增组件
+
+| 组件 | 位置 | 说明 |
 |------|------|------|
-| 服务自启 | 用户登录后 30s | PostgreSQL + 后端 + ngrok |
-| 早间采集 | 每天 09:00 | 采集抖店 → 推后端 |
-| 晚间采集 | 每天 21:00 | 同上 |
+| `bridge/` | `scraper/bridge/` | Python 桥接模块，封装 1688 CLI 调用 |
+| `alibaba/` | `backend/server/modules/alibaba/` | NestJS 模块，封装桥接 API |
+| 1688 选品页 | `backend/client/src/pages/AlibabaPage/` | 前端选品/铺货 UI |
+
+## ⏰ 定时任务
 
 ## 🔧 环境变量（`backend/.env`）
 

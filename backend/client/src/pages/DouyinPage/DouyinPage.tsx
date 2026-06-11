@@ -8,6 +8,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   ShoppingBag,
   Package,
   AlertTriangle,
@@ -16,17 +23,30 @@ import {
   RefreshCw,
   Clock,
   List,
+  Play,
+  Loader2,
+  Store,
+  Plus,
+  Trash2,
+  Settings2,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getDouyinLatestSnapshot } from '@/api';
+import { getDouyinLatestSnapshot, triggerDouyinScrape, getShops, addShop, deleteShop } from '@/api';
 import type { DouyinDailySnapshot, DouyinSnapshotProduct } from '@shared/api.interface';
 
 const DouyinPage: React.FC = () => {
   const [latest, setLatest] = useState<DouyinDailySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [collecting, setCollecting] = useState(false);
+  const [shops, setShops] = useState<{ shop_id: string; shop_name: string }[]>([]);
+  const [selectedShop, setSelectedShop] = useState<string>('');
+  const [shopName, setShopName] = useState('');
+  const [shopId, setShopId] = useState('');
+  const [shopDialogOpen, setShopDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
+    loadShops();
   }, []);
 
   const loadData = async () => {
@@ -38,6 +58,69 @@ const DouyinPage: React.FC = () => {
       toast.error('加载抖店数据失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadShops = async () => {
+    try {
+      const list = await getShops();
+      setShops(list);
+    } catch (error) {
+      // 静默失败
+    }
+  };
+
+  const handleTriggerScrape = async () => {
+    try {
+      setCollecting(true);
+      toast.info('正在启动采集器，浏览器将自动打开...');
+
+      const result = await triggerDouyinScrape(selectedShop || undefined);
+
+      if (result.success) {
+        toast.success(result.message);
+        // 10 秒后自动刷新数据
+        setTimeout(async () => {
+          await loadData();
+          setCollecting(false);
+        }, 10000);
+      } else {
+        toast.error(result.message);
+        setCollecting(false);
+      }
+    } catch (error) {
+      toast.error('触发采集失败，请检查后端是否运行');
+      setCollecting(false);
+    }
+  };
+
+  const handleAddShop = async () => {
+    if (!shopId.trim()) {
+      toast.error('请输入店铺 ID');
+      return;
+    }
+    try {
+      await addShop(shopId.trim(), shopName.trim() || shopId.trim());
+      toast.success(`店铺 ${shopId} 已添加`);
+      setShopId('');
+      setShopName('');
+      await loadShops();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || '添加店铺失败');
+    }
+  };
+
+  const handleDeleteShop = async (id: string, name: string) => {
+    if (!window.confirm(`确定删除店铺「${name}」？\n\n该店铺的所有商品、入库记录、出库记录、预警和快照数据都将被永久删除，无法恢复！`)) {
+      return;
+    }
+    try {
+      await deleteShop(id);
+      toast.success(`店铺 ${name} 已删除，相关数据已清理`);
+      if (selectedShop === id) setSelectedShop('');
+      await loadShops();
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || '删除店铺失败');
     }
   };
 
@@ -67,9 +150,27 @@ const DouyinPage: React.FC = () => {
             <h1 className="text-2xl font-bold text-foreground">抖店概览</h1>
             <p className="text-sm text-muted-foreground mt-1">查看抖店商品采集数据与每日运营概况</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
+            <select
+              className="px-3 py-2 rounded-md border bg-background text-sm max-w-[160px]"
+              value={selectedShop}
+              onChange={e => setSelectedShop(e.target.value)}
+            >
+              <option value="">默认店铺</option>
+              {shops.map(s => (
+                <option key={s.shop_id} value={s.shop_id}>{s.shop_name}</option>
+              ))}
+            </select>
             <Button variant="outline" onClick={loadData}>
               <RefreshCw className="w-4 h-4 mr-2" /> 刷新
+            </Button>
+            <Button onClick={handleTriggerScrape} disabled={collecting}>
+              {collecting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4 mr-2" />
+              )}
+              {collecting ? '采集中...' : '手动采集'}
             </Button>
           </div>
         </div>
@@ -77,10 +178,7 @@ const DouyinPage: React.FC = () => {
           <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <ShoppingBag className="w-16 h-16 mb-4 opacity-20" />
             <p className="text-lg font-medium">暂无采集数据</p>
-            <p className="text-sm mt-1">请先在终端运行采集器：</p>
-            <code className="mt-3 px-4 py-2 bg-muted rounded-md text-sm font-mono">
-              python cli.py daily-push --api-url http://localhost:3000
-            </code>
+            <p className="text-sm mt-1">点击"手动采集"按钮开始采集抖店数据</p>
           </CardContent>
         </Card>
       </div>
@@ -103,9 +201,81 @@ const DouyinPage: React.FC = () => {
             采集日期: {latest.snapshotDate}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          <select
+            className="px-3 py-2 rounded-md border bg-background text-sm max-w-[160px]"
+            value={selectedShop}
+            onChange={e => setSelectedShop(e.target.value)}
+          >
+            <option value="">默认店铺</option>
+            {shops.map(s => (
+              <option key={s.shop_id} value={s.shop_id}>{s.shop_name}</option>
+            ))}
+          </select>
+          <Dialog open={shopDialogOpen} onOpenChange={setShopDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" title="店铺管理">
+                <Settings2 className="w-4 h-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Store className="w-5 h-5" /> 店铺管理
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                {/* 添加店铺表单 */}
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
+                    placeholder="店铺 ID（必填）"
+                    value={shopId}
+                    onChange={e => setShopId(e.target.value)}
+                  />
+                  <input
+                    className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
+                    placeholder="店铺名称（选填）"
+                    value={shopName}
+                    onChange={e => setShopName(e.target.value)}
+                  />
+                  <Button size="sm" onClick={handleAddShop}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {/* 店铺列表 */}
+                <div className="divide-y">
+                  <div className="flex items-center justify-between py-2 text-sm text-muted-foreground">
+                    <span>默认店铺（当前）</span>
+                  </div>
+                  {shops.map(s => (
+                    <div key={s.shop_id} className="flex items-center justify-between py-2">
+                      <div>
+                        <p className="text-sm font-medium">{s.shop_name}</p>
+                        <p className="text-xs text-muted-foreground">ID: {s.shop_id}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteShop(s.shop_id, s.shop_name)}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  {shops.length === 0 && (
+                    <p className="text-sm text-muted-foreground py-4 text-center">暂无其他店铺，在上方添加</p>
+                  )}
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
           <Button variant="outline" onClick={loadData}>
             <RefreshCw className="w-4 h-4 mr-2" /> 刷新数据
+          </Button>
+          <Button onClick={handleTriggerScrape} disabled={collecting}>
+            {collecting ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-4 h-4 mr-2" />
+            )}
+            {collecting ? '采集中...' : '手动采集'}
           </Button>
         </div>
       </div>

@@ -103,6 +103,7 @@ export const douyinConfig = pgTable("douyin_config", {
 export const douyinDailySnapshot = pgTable("douyin_daily_snapshot", {
   id: uuid().defaultRandom().notNull(),
   snapshotDate: varchar("snapshot_date", { length: 20 }).notNull(),
+  shopId: varchar("shop_id", { length: 100 }).default('').notNull(),
   productCount: integer("product_count").default(0),
   orderCount: integer("order_count").default(0),
   rejectedCount: integer("rejected_count").default(0),

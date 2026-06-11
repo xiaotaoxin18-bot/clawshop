@@ -3,6 +3,8 @@ import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack
 import { product, inboundRecord, outboundRecord, alertRecord } from '@server/database/schema';
 import { douyinOrderSync, douyinSyncLog, douyinDailySnapshot } from '@server/database/douyin-schema';
 import { eq, sql, desc, and, count as drizzleCount } from 'drizzle-orm';
+import { exec } from 'child_process';
+import { join } from 'path';
 import type {
   DouyinProductData,
   DouyinOrderData,
@@ -15,6 +17,8 @@ import type {
   DailyPushPayload,
   DailySnapshotResponse,
   SnapshotListResponse,
+  TriggerScrapeRequest,
+  TriggerScrapeResponse,
 } from './douyin.types';
 
 /**
@@ -414,20 +418,25 @@ export class DouyinService {
   // ==================== 浏览器采集推送 ====================
 
   /**
-   * 保存每日采集快照
+   * 保存每日采集快照（支持多店铺隔离）
    */
   async saveDailySnapshot(payload: DailyPushPayload): Promise<SyncResultResponse> {
     try {
       const date = payload.snapshot.date;
+      const shopId = payload.shop_id || '__default__';
 
-      // 检查是否已存在当天记录
+      // 按 (shop_id, snapshot_date) 唯一键查找
       const [existing] = await this.db
         .select()
         .from(douyinDailySnapshot)
-        .where(eq(douyinDailySnapshot.snapshotDate, date));
+        .where(and(
+          eq(douyinDailySnapshot.snapshotDate, date),
+          eq(douyinDailySnapshot.shopId , shopId),
+        ));
 
       const snapshotData = {
         snapshotDate: date,
+        shopId: shopId,
         productCount: payload.snapshot.product_count,
         orderCount: payload.snapshot.order_count,
         rejectedCount: payload.snapshot.rejected_count,
@@ -447,10 +456,10 @@ export class DouyinService {
           .update(douyinDailySnapshot)
           .set(snapshotData)
           .where(eq(douyinDailySnapshot.id, existing.id));
-        this.logger.log(`快照已更新: ${date}`);
+        this.logger.log(`快照已更新: ${date} [${shopId}]`);
       } else {
         await this.db.insert(douyinDailySnapshot).values(snapshotData);
-        this.logger.log(`快照已创建: ${date}`);
+        this.logger.log(`快照已创建: ${date} [${shopId}]`);
       }
 
       // ========== 同步商品到 product 表 + 生成业务记录 ==========
@@ -459,11 +468,14 @@ export class DouyinService {
       let outboundCount = 0;
       let alertCount = 0;
 
-      // 获取上次快照（用于对比销量变化）
+      // 获取该店铺的上次快照（用于对比销量变化）
       const [prevSnapshot] = await this.db
         .select()
         .from(douyinDailySnapshot)
-        .where(sql`${douyinDailySnapshot.snapshotDate} < ${date}`)
+        .where(and(
+          sql`${douyinDailySnapshot.snapshotDate} < ${date}`,
+          eq(douyinDailySnapshot.shopId , shopId),
+        ))
         .orderBy(desc(douyinDailySnapshot.snapshotDate))
         .limit(1);
       const prevProducts: any[] = (prevSnapshot?.allProducts || []) as any[];
@@ -477,10 +489,14 @@ export class DouyinService {
       if (payload.products && payload.products.length > 0) {
         for (const p of payload.products) {
           try {
+            // 按 (shop_id, douyin_product_id) 匹配商品
             const [existing] = await this.db
               .select()
               .from(product)
-              .where(eq(product.douyinProductId, p.douyin_product_id));
+              .where(and(
+                eq(product.douyinProductId, p.douyin_product_id),
+                eq(product.shopId , shopId),
+              ));
 
             const now = new Date();
             if (existing) {
@@ -495,7 +511,7 @@ export class DouyinService {
                   currentStock: p.stock ?? existing.currentStock,
                   category: p.category || existing.category,
                   platformStatus: p.status || 'active',
-                  // 根据采集的库存数据设置可售状态
+                  shopId: shopId,
                   sellableStatus: p.stock && p.stock > 0 ? 'normal' : 'emergency',
                   lastSyncAt: now,
                 })
@@ -509,11 +525,12 @@ export class DouyinService {
                   quantity: salesDiff,
                   operator: '抖店同步',
                   warehouse: '抖店',
+                  shopId: shopId,
                   orderNo: `DY-${date}-${p.douyin_product_id}`,
                   items: [{ productId: existing.id, productName: p.name, quantity: salesDiff }],
                   outboundType: 'sale',
                   outType: 'sales',
-                  remark: `抖店销量同步: +${salesDiff}`,
+                  remark: `抖店销量同步[${shopId}]: +${salesDiff}`,
                 });
                 outboundCount++;
               }
@@ -530,7 +547,7 @@ export class DouyinService {
                   currentStock: p.stock || 0,
                   category: p.category || '',
                   platformStatus: p.status || 'active',
-                  // 根据采集的库存数据设置可售状态
+                  shopId: shopId,
                   sellableStatus: p.stock && p.stock > 0 ? 'normal' : 'emergency',
                   lastSyncAt: now,
                 })
@@ -541,10 +558,11 @@ export class DouyinService {
                 quantity: p.stock || 1,
                 operator: '抖店同步',
                 warehouse: '抖店',
+                shopId: shopId,
                 orderNo: `IN-DY-${date}-${p.douyin_product_id}`,
                 items: JSON.stringify([{ productId: record.id, productName: p.name, quantity: p.stock || 1 }]),
                 inType: 'purchase',
-                remark: `抖店新增商品同步: ${p.name}`,
+                remark: `抖店新增商品同步[${shopId}]: ${p.name}`,
               });
               inboundCount++;
             }
@@ -561,6 +579,7 @@ export class DouyinService {
                 currentStock: currentStock,
                 safetyStock: 10,
                 shortAmount: 10,
+                shopId: shopId,
                 sellableDays: 0,
                 sellableStatus: 'emergency',
               });
@@ -570,10 +589,11 @@ export class DouyinService {
             this.logger.warn(`处理商品失败: ${p.douyin_product_id}`, err);
           }
         }
-        this.logger.log(`同步完成: ${syncedCount}商品, ${inboundCount}入库, ${outboundCount}出库, ${alertCount}预警`);
+        this.logger.log(`同步完成[${shopId}]: ${syncedCount}商品, ${inboundCount}入库, ${outboundCount}出库, ${alertCount}预警`);
       }
 
       await this.logSync('snapshot', 'manual_sync', 'manual', {
+        shopId,
         date,
         productCount: payload.snapshot.product_count,
         orderCount: payload.snapshot.order_count,
@@ -583,7 +603,7 @@ export class DouyinService {
         alertCreated: alertCount,
       });
 
-      return { success: true, message: `快照已保存: ${date}`, processedCount: syncedCount + inboundCount + outboundCount };
+      return { success: true, message: `快照已保存[${shopId}]: ${date}`, processedCount: syncedCount + inboundCount + outboundCount };
     } catch (error: any) {
       this.logger.error(`保存快照失败`, error?.message || error);
       return { success: false, message: `保存快照失败: ${error?.message || '未知错误'}` };
@@ -651,6 +671,56 @@ export class DouyinService {
       allProducts: (record.allProducts || []) as any[],
       createdAt: record.createdAt.toISOString(),
     };
+  }
+
+  /**
+   * 手动触发采集
+   * 通过 child_process 调用 Python 采集器，支持指定店铺
+   */
+  async triggerScrape(data: TriggerScrapeRequest): Promise<TriggerScrapeResponse> {
+    const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
+    const apiUrl = process.env.SERVER_HOST
+      ? `http://${process.env.SERVER_HOST}:${process.env.SERVER_PORT || '3000'}`
+      : 'http://localhost:3000';
+
+    let cmd = `cd /d "${scraperDir}" && python cli.py daily-push --api-url ${apiUrl}`;
+    if (data.shop_id) {
+      cmd += ` --shop-id "${data.shop_id}"`;
+    }
+
+    this.logger.log(`触发采集: ${cmd}`);
+
+    try {
+      const child = exec(cmd, {
+        cwd: scraperDir,
+        timeout: 600000, // 10 分钟超时
+        windowsHide: false, // 显示浏览器窗口
+      });
+
+      child.stdout?.on('data', (chunk: string) => {
+        this.logger.log(`[采集器] ${chunk.trim()}`);
+      });
+      child.stderr?.on('data', (chunk: string) => {
+        this.logger.warn(`[采集器] ${chunk.trim()}`);
+      });
+      child.on('close', (code: number | null) => {
+        this.logger.log(`采集器进程退出, code=${code}`);
+      });
+      child.on('error', (err: Error) => {
+        this.logger.error(`采集器启动失败: ${err.message}`);
+      });
+
+      return {
+        success: true,
+        message: data.shop_id
+          ? `店铺 ${data.shop_id} 采集任务已启动，浏览器将自动打开`
+          : '采集任务已启动，浏览器将自动打开',
+        task_id: child.pid?.toString(),
+      };
+    } catch (error: any) {
+      this.logger.error(`触发采集失败: ${error.message}`);
+      return { success: false, message: `触发采集失败: ${error.message}` };
+    }
   }
 }
 

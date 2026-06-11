@@ -80,6 +80,10 @@ scraper/
 ├── cookies.json            # 登录态 cookie 备份（自动生成）
 ├── products.json           # 最近一次采集结果
 ├── last_products.json      # 上次采集结果（用于对比变化）
+├── bridge/                 # 1688 选品铺货桥接模块（规划中）
+│   ├── alibaba.py          # 封装 1688-shopkeeper CLI 调用
+│   ├── sync.py             # 铺货结果同步到 backend API
+│   └── cli.py              # 桥接模块统一入口
 ├── edge_profile/           # 浏览器登录态（自动生成）
 ├── douyin_operator/        # Python 包
 │   ├── browser.py          # Playwright 浏览器管理

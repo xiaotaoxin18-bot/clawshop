@@ -220,6 +220,30 @@ export class DashboardService {
       .where(sql`${product.category} IS NOT NULL`)
       .groupBy(product.category);
 
+    // 分类分布（按商品名称，反映相同商品在不同店铺的分布）
+    const nameStats = await this.db
+      .select({
+        name: product.name,
+        count: count(product.id),
+        value: sql<number>`COALESCE(SUM(${product.currentStock} * ${product.costPrice}), 0)`,
+      })
+      .from(product)
+      .where(sql`${product.name} IS NOT NULL`)
+      .groupBy(product.name)
+      .orderBy(desc(count(product.id)))
+      .limit(20);
+
+    // 店铺分布
+    const shopStats = await this.db
+      .select({
+        shopId: product.shopId,
+        count: count(product.id),
+        value: sql<number>`COALESCE(SUM(${product.currentStock} * ${product.costPrice}), 0)`,
+      })
+      .from(product)
+      .where(sql`${product.shopId} IS NOT NULL AND ${product.shopId} != ''`)
+      .groupBy(product.shopId);
+
     // 从入库记录统计仓库分布
     const warehouseInboundStats = await this.db
       .select({
@@ -277,6 +301,16 @@ export class DashboardService {
       overstockProductCount: Number(overstockResult.count),
       categoryDistribution: categoryStats.map(item => ({
         category: item.category || '未分类',
+        count: Number(item.count),
+        value: Number(item.value),
+      })),
+      nameDistribution: nameStats.map(item => ({
+        name: item.name || '未知商品',
+        count: Number(item.count),
+        value: Number(item.value),
+      })),
+      shopDistribution: shopStats.map(item => ({
+        shopId: item.shopId || '',
         count: Number(item.count),
         value: Number(item.value),
       })),

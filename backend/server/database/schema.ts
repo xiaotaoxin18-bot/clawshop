@@ -144,6 +144,7 @@ export const product = pgTable("product", {
   salesCount: integer("sales_count").default(0),
   platformCategory: varchar("platform_category", { length: 100 }),
   lastSyncAt: customTimestamptz("last_sync_at"),
+  shopId: varchar("shop_id", { length: 100 }).default(''),
   // System field: Creation time (auto-filled, do not modify)
   createdAt: customTimestamptz('_created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   // System field: Creator (auto-filled, do not modify)
@@ -175,6 +176,7 @@ export const inboundRecord = pgTable("inbound_record", {
    */
   items: jsonb().default([]),
   inType: varchar("in_type", { length: 255 }).default('tear_order'),
+  shopId: varchar("shop_id", { length: 100 }).default(''),
   // System field: Creation time (auto-filled, do not modify)
   createdAt: customTimestamptz('_created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   // System field: Creator (auto-filled, do not modify)
@@ -239,6 +241,7 @@ export const outboundRecord = pgTable("outbound_record", {
   outboundType: varchar("outbound_type", { length: 20 }).default('sale'),
   outType: varchar("out_type", { length: 255 }).default('sales'),
   sourceWarehouse: varchar("source_warehouse", { length: 255 }),
+  shopId: varchar("shop_id", { length: 100 }).default(''),
   // System field: Creation time (auto-filled, do not modify)
   createdAt: customTimestamptz('_created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   // System field: Creator (auto-filled, do not modify)
@@ -273,6 +276,7 @@ export const alertRecord = pgTable("alert_record", {
   handledAt: customTimestamptz('handled_at'),
   sellableDays: doublePrecision("sellable_days"),
   sellableStatus: varchar("sellable_status", { length: 20 }),
+  shopId: varchar("shop_id", { length: 100 }).default(''),
   // System field: Creation time (auto-filled, do not modify)
   createdAt: customTimestamptz('_created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   // System field: Creator (auto-filled, do not modify)

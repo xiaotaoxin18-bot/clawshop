@@ -32,6 +32,21 @@ PROFILE_DIR = os.path.join(PROJECT_DIR, "edge_profile")
 COOKIES_FILE = os.path.join(PROJECT_DIR, "cookies.json")
 
 
+def _cookie_file(shop_id=None):
+    """获取店铺对应的 cookie 文件路径"""
+    if shop_id:
+        return os.path.join(PROJECT_DIR, f"cookies_{shop_id}.json")
+    return COOKIES_FILE
+
+
+def _products_file(shop_id=None, suffix=""):
+    """获取店铺对应的商品数据文件路径"""
+    base = f"products{suffix}" if suffix else "products"
+    if shop_id:
+        return os.path.join(PROJECT_DIR, f"{base}_{shop_id}.json")
+    return os.path.join(PROJECT_DIR, f"{base}.json")
+
+
 def ensure_playwright():
     try:
         from playwright.sync_api import sync_playwright
@@ -64,12 +79,16 @@ def _parse_flags(args):
         "chrome": "--chrome" in args,
         "edge": "--edge" in args,
         "api_url": None,
+        "shop_id": None,
     }
     remaining = []
     i = 0
     while i < len(args):
         if args[i] == "--api-url" and i + 1 < len(args):
             flags["api_url"] = args[i + 1]
+            i += 2
+        elif args[i] == "--shop-id" and i + 1 < len(args):
+            flags["shop_id"] = args[i + 1]
             i += 2
         elif args[i].startswith("--"):
             i += 1
@@ -87,26 +106,32 @@ def _get_channel(flags):
     return os.environ.get("BROWSER_CHANNEL") or "msedge"
 
 
-def _load_cookies(context):
+def _load_cookies(context, shop_id=None):
     """从 cookie 文件恢复登录态"""
-    if os.path.exists(COOKIES_FILE):
+    cookie_file = _cookie_file(shop_id)
+    if os.path.exists(cookie_file):
         try:
-            with open(COOKIES_FILE, "r", encoding="utf-8") as f:
+            with open(cookie_file, "r", encoding="utf-8") as f:
                 cookies = json.load(f)
             if cookies:
                 context.add_cookies(cookies)
-                print(f"[cookie] 已恢复 {len(cookies)} 个 cookie")
+                shop_tag = f" [{shop_id}]" if shop_id else ""
+                print(f"[cookie]{shop_tag} 已恢复 {len(cookies)} 个 cookie")
         except Exception as e:
             print(f"[cookie] 恢复失败: {e}")
+    elif shop_id:
+        print(f"[cookie] 店铺 {shop_id} 无 cookie 文件，需要扫码登录")
 
 
-def _save_cookies(context):
+def _save_cookies(context, shop_id=None):
     """保存登录态到 cookie 文件"""
     try:
         cookies = context.cookies()
-        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+        cookie_file = _cookie_file(shop_id)
+        with open(cookie_file, "w", encoding="utf-8") as f:
             json.dump(cookies, f, ensure_ascii=False, indent=2)
-        print(f"[cookie] 已保存 {len(cookies)} 个 cookie")
+        shop_tag = f" [{shop_id}]" if shop_id else ""
+        print(f"[cookie]{shop_tag} 已保存 {len(cookies)} 个 cookie")
     except Exception as e:
         print(f"[cookie] 保存失败: {e}")
 
@@ -119,19 +144,20 @@ def _run_browser(flags, callback):
     pw = sync_playwright().start()
     os.makedirs(PROFILE_DIR, exist_ok=True)
 
+    shop_id = flags.get("shop_id")
     context = pw.chromium.launch_persistent_context(
         PROFILE_DIR,
         channel=channel,
         headless=flags.get("headless", False),
         viewport={"width": 1280, "height": 800},
     )
-    _load_cookies(context)
+    _load_cookies(context, shop_id=shop_id)
     page = context.pages[0] if context.pages else context.new_page()
     page.bring_to_front()
     return callback(page, context, pw)
 
 
-def _ensure_login(page):
+def _ensure_login(page, shop_id=None):
     """检测登录页，等待用户扫码登录"""
     try:
         page.wait_for_load_state('load', timeout=15000)
@@ -153,14 +179,15 @@ def _ensure_login(page):
         time.sleep(2)
         text = page.evaluate("document.body.innerText")
     if "发送验证码" in text[:300]:
-        print("=== 请扫码登录抖店（浏览器窗口已打开） ===")
+        shop_tag = f" [{shop_id}]" if shop_id else ""
+        print(f"=== 请扫码登录抖店{shop_tag}（浏览器窗口已打开） ===")
         page.wait_for_function(
             "() => !document.body.innerText.includes('发送验证码') && document.body.innerText.length > 800",
             timeout=600000,
         )
         time.sleep(3)
         print("[OK] 登录成功！")
-    _save_cookies(page.context)
+    _save_cookies(page.context, shop_id=shop_id)
 
 
 def cmd_collect(flags):
@@ -293,16 +320,18 @@ def cmd_daily_push(flags):
         return
 
     api_url = api_url.rstrip("/")
+    shop_id = flags.get("shop_id")
 
     def cb(page, ctx, pw):
         try:
             # 先去商品页登录
             page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
             page.wait_for_load_state('load', timeout=15000)
-            _ensure_login(page)
+            _ensure_login(page, shop_id=shop_id)
 
             # ---- 采集商品 ----
-            print("\n=== 1/5 采集在售商品 ===")
+            shop_tag = f" [{shop_id}]" if shop_id else ""
+            print(f"\n=== 1/5 采集在售商品{shop_tag} ===")
             class FakeBM:
                 def __init__(self, p):
                     self.page = p
@@ -402,7 +431,8 @@ def cmd_daily_push(flags):
             # ---- 对比上次 ----
             print("\n=== 推送到后端 ===")
             today = datetime.now().strftime("%Y-%m-%d")
-            last_file = os.path.join(PROJECT_DIR, "last_products.json")
+            last_file = _products_file(shop_id, suffix="last")
+            backup_file = _products_file(shop_id, suffix=today) if shop_id else os.path.join(PROJECT_DIR, f"products_{today}.json")
 
             current_ids = {p["id"] for p in products}
             previous_products = []
@@ -420,10 +450,9 @@ def cmd_daily_push(flags):
             # ---- 保存本地备份 ----
             with open(last_file, "w", encoding="utf-8") as f:
                 json.dump(products, f, ensure_ascii=False, indent=2)
-            backup_file = os.path.join(PROJECT_DIR, f"products_{today}.json")
             with open(backup_file, "w", encoding="utf-8") as f:
                 json.dump(products, f, ensure_ascii=False, indent=2)
-            with open("products.json", "w", encoding="utf-8") as f:
+            with open(_products_file(shop_id), "w", encoding="utf-8") as f:
                 json.dump(products, f, ensure_ascii=False, indent=2)
 
             # ---- 推送后端 ----
@@ -453,6 +482,8 @@ def cmd_daily_push(flags):
             ]
 
             payload = {
+                "shop_id": shop_id,
+                "shop_name": shop_id,
                 "snapshot": {
                     "date": today,
                     "product_count": len(products),

@@ -26,6 +26,10 @@ import type {
   DailyPushPayload,
   SnapshotListResponse,
   DailySnapshotResponse,
+  TriggerScrapeRequest,
+  TriggerScrapeResponse,
+  AddShopRequest,
+  ShopInfo,
 } from './douyin.types';
 
 /**
@@ -141,6 +145,33 @@ export class DouyinController {
     return { success: true, message: '配置已更新' };
   }
 
+  // ==================== 店铺管理 ====================
+
+  /**
+   * 获取所有店铺配置
+   */
+  @Get('shops')
+  async listShops(): Promise<ShopInfo[]> {
+    return this.douyinConfigService.listShops();
+  }
+
+  /**
+   * 添加店铺
+   */
+  @Post('shops')
+  async addShop(@Body() data: AddShopRequest): Promise<ShopInfo> {
+    return this.douyinConfigService.addShop(data.shop_id, data.shop_name);
+  }
+
+  /**
+   * 删除店铺
+   */
+  @Delete('shops/:shopId')
+  async deleteShop(@Param('shopId') shopId: string): Promise<{ success: boolean; message: string }> {
+    await this.douyinConfigService.deleteShop(shopId);
+    return { success: true, message: `店铺 ${shopId} 已删除` };
+  }
+
   // ==================== 浏览器采集推送 ====================
 
   /**
@@ -171,6 +202,17 @@ export class DouyinController {
   @Get('scrape/latest')
   async getLatestSnapshot(): Promise<DailySnapshotResponse | null> {
     return this.douyinService.getLatestSnapshot();
+  }
+
+  /**
+   * 手动触发浏览器采集
+   * 后端通过 child_process 调用 Python 采集器
+   */
+  @Post('scrape/trigger')
+  async triggerScrape(
+    @Body() data: TriggerScrapeRequest,
+  ): Promise<TriggerScrapeResponse> {
+    return this.douyinService.triggerScrape(data);
   }
 
   // ==================== 统计概览 ====================

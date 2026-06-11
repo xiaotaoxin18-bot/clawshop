@@ -18,8 +18,18 @@ set PGHOME=%PROJECT_ROOT%\data\pgsql\pgsql
 set PATH=%PGHOME%\bin;%PATH%
 "%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" -l "%PROJECT_ROOT%\data\pgdata\logfile" start
 
-rem ---- 稍等数据库启动 ----
-ping -n 6 127.0.0.1 >nul
+rem ---- 等待 PostgreSQL 真正就绪（轮询 pg_isready，最多 60 秒） ----
+setlocal enabledelayedexpansion
+set "PG_READY="
+for /l %%i in (1,1,60) do (
+    "%PGHOME%\bin\pg_isready" -q >nul 2>&1 && set "PG_READY=1" && goto DB_READY
+    ping -n 2 127.0.0.1 >nul
+)
+:DB_READY
+if not defined PG_READY (
+    echo [WARN] PostgreSQL 未在 60 秒内就绪，仍尝试启动后端...
+)
+endlocal
 
 rem ---- 2. 启动后端（生产模式，serve 前端+API） ----
 start "clawshop-backend" cmd /c "cd /d \"%PROJECT_ROOT%\backend\" && set SUDA_DATABASE_URL=postgresql://appuser:app123456@localhost:5432/inventory_db?schema=workspace_aadkeahc42wbs && set FORCE_AUTHN_INNERAPI_DOMAIN=localhost:3000 && set NODE_ENV=production && node dist/server/main.js"
