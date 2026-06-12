@@ -101,10 +101,16 @@ scripts\stop-all.bat
 | 启动文件夹 `ngrok.bat` | 登录时 | 仅启动 ngrok（冗余备份） |
 
 开机自启的自动启动顺序（由 `startup.bat` 执行）：
-1. 清理残留的 PostgreSQL 锁文件（防止非正常关机导致启动失败）
+1. 清理残留的 PostgreSQL 锁文件和进程（防止非正常关机导致启动失败）
 2. PostgreSQL（端口 5432）— 用 `pg_isready` 轮询等待真正就绪（最长 60 秒）
-3. 后端（生产模式，`node dist/server/main.js`，端口 3000，含前端页面和 API）— 等待 8 秒
-4. ngrok（公网隧道 → 端口 3000）
+3. 后端与 ngrok 均通过 `scripts/start-hidden.vbs`（VBScript）**完全隐藏后台启动**，无任何控制台窗口
+4. 所有服务独立运行，关闭启动窗口不影响服务继续运行
+
+管理脚本：
+
+| 脚本 | 说明 |
+|------|------|
+| `start-hidden.vbs` | VBScript 辅助脚本，用于完全隐藏启动任意程序（无窗口） |
 
 > ⚠️ **已知问题**：电脑非正常关机（强制关机/断电）会导致 `data/pgdata/postmaster.pid` 锁文件残留，下次开机 PostgreSQL 无法启动，连锁导致后端也起不来。`startup.bat` 已内置自动清理逻辑，启动数据库前会检查并删除残留的 `postmaster.pid`。
 >
@@ -302,6 +308,7 @@ const categoryText = cells[5].innerText; // 体验分
 - 本机运行，关电脑后飞书网页应用无法访问。如需 24 小时在线需部署到云服务器
 - **非正常关机（强制关机/断电）** 会导致 PostgreSQL 的 `data/pgdata/postmaster.pid` 锁文件残留，下次开机三个服务中可能只有 ngrok 起来。表现为飞书 ERR_FAILED（-2 502）。`startup.bat` 已内置自动清理逻辑，如遇此情况可手动运行一次 `start-all.bat` 或重启电脑
 - **ERR_NGROK_3200**：通过 ngrok 域名访问时如果看到这个错误，说明后端没启动（ngrok 隧道活着但代理不到 localhost:3000）。先检查 `localhost:3000` 能否打开，若不能则运行 `scripts\start-all.bat` 启动后端
+- **服务全部隐藏运行**：`start-all.bat` 启动后所有服务均在后台运行（无控制台窗口）。查看后端日志：`backend\node_out.log` / `backend\node_err.log`，ngrok 面板：`http://127.0.0.1:4040`
 - **首次部署需要运行数据库迁移**：`drizzle/0001_douyin_tables.sql` 创建抖店相关表（`douyin_config`、`douyin_order_sync`、`douyin_sync_log`），创建后需关闭 RLS：`ALTER TABLE douyin_config DISABLE ROW LEVEL SECURITY;`（以及另外两张表）
 - **已有商品无 shop_id**：2026-06-11 之前采集的商品没有 `shop_id` 字段，不会出现在按店铺分布图表中。重新采集一次即可
 - **销量/库存采反**：2026-06-11 修复了 `collector.py` 中抖店页面的列读取顺序（售价→库存→销量→体验分），历史已采集的数据中 `sales_count` 和 `current_stock` 相反。已执行 SQL 修复，后续采集数据正常
