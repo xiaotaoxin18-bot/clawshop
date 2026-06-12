@@ -306,7 +306,7 @@ const categoryText = cells[5].innerText; // 体验分
 
 推荐 **CLI 桥接 + API 网关** 组合方案，分三阶段实施：
 
-#### Phase 1：CLI 桥接（scraper/bridge/）
+#### Phase 1：CLI 桥接（scraper/bridge/）✅ 已完成
 
 在 `scraper/` 下新增 `bridge/` 目录，通过 subprocess 调用 1688-shopkeeper CLI：
 
@@ -319,9 +319,9 @@ scraper/bridge/
 ```
 
 ```bash
-# 示例用法
-python bridge/cli.py search "夏季连衣裙" --channel douyin
-python bridge/cli.py publish --shop-code CODE --data-id ID --sync
+# 示例用法（从 scraper/ 目录运行）
+python -m bridge.cli search --query "夏季连衣裙" --channel douyin
+python -m bridge.cli publish --shop-code CODE --data-id ID --sync
 ```
 
 **前置条件：** 本地安装 1688-shopkeeper，配置 `ALI_1688_AK` 环境变量。
