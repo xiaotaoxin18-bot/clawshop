@@ -39,6 +39,8 @@ scripts\start-all.bat
 set NGROK_PATH=D:\ngrok\ngrok.exe
 ```
 
+> 如果 `NGROK_PATH` 未设置且 ngrok 不在 PATH 中，启动脚本会自动尝试 `D:\ngrok\ngrok.exe` 作为备用路径。
+
 ## 目录结构
 
 ```
@@ -107,6 +109,8 @@ scripts\stop-all.bat
 > ⚠️ **已知问题**：电脑非正常关机（强制关机/断电）会导致 `data/pgdata/postmaster.pid` 锁文件残留，下次开机 PostgreSQL 无法启动，连锁导致后端也起不来。`startup.bat` 已内置自动清理逻辑，启动数据库前会检查并删除残留的 `postmaster.pid`。
 >
 > 另外，PostgreSQL 异常崩溃后恢复可能耗时较长（30 秒以上）。2026-06-11 修复：启动脚本已从固定等待 5 秒改为 `pg_isready` 轮询，最多等 60 秒，确保 PostgreSQL 完全就绪后才启动后端。
+>
+> 2026-06-12 增强：`start-all.bat` 和 `startup.bat` 增加 PostgreSQL 崩溃自动恢复能力。当 `pg_isready` 检测失败时，自动检测并用 `wmic` 强杀残留 `postgres.exe` 进程，清理共享内存段，然后重新启动 PostgreSQL。
 
 ## 管理脚本
 
@@ -141,6 +145,8 @@ cd backend
 npm run build:client     # rspack build + clean-html.js（构建前端 + 自动清理）
 npm run build:server     # npx nest build（编译后端 TypeScript）
 ```
+
+> ⚠️ **Windows 兼容**：`package.json` 中的脚本已移除 `NODE_ENV=production` 前缀（Unix 语法，Windows 不兼容），`rspack build --env mode=production` 已足够设置生产模式。如果在 cmd.exe 下直接运行，用 `set NODE_ENV=production && command` 语法。
 
 修改代码后的完整重启流程：
 ```bash
@@ -181,7 +187,11 @@ ngrok 免费版每次重启地址会变，需要在飞书开放平台更新：
 3. `rspack.config.js` — `resolve.alias` 替换 `@lark-apaas/*` 为本地桩模块
 4. `client/src/stubs/` — 8 个桩模块 + runtime + observable-web 包屏蔽
 
+> ⚠️ **clean-html.js 注意事项**：只能移除 Feishu SDK 注入脚本（Slardar/Tea/Performance）和内联配置脚本（`__platform__`/`csrfToken`），**不能**移除 rspack 的 CSS 浏览器检测脚本（`isModernBrowser`）和 polyfill 检测脚本（`needsPolyfill`），否则页面无法加载 CSS，布局会完全错乱。
+
 ## 采集流程
+
+### 数据流向
 
 ```
 scraper cli.py daily-push [--shop-id <店铺ID>]
@@ -197,6 +207,22 @@ scraper cli.py daily-push [--shop-id <店铺ID>]
        ├── alert_record（库存为0 → 自动预警）
        └── douyin_daily_snapshot（每日快照）
 ```
+
+### 列映射
+
+抖店商品管理页的列顺序为：**售价 → 库存 → 销量 → 体验分**
+
+采集器 `collector.py` 的 JS 提取逻辑：
+
+```javascript
+const cells = r.querySelectorAll('td');
+const priceText   = cells[2].innerText;  // 售价
+const stockText   = cells[3].innerText;  // 库存（第4列）
+const saleText    = cells[4].innerText;  // 销量（第5列）
+const categoryText = cells[5].innerText; // 体验分
+```
+
+> **注意**：2026-06-11 之前采集的销量和库存数据是反的（第4列误读为销量，第5列误读为库存）。已修复 `collector.py`，下次采集后数据恢复正常。历史数据需重新采集或手动修复数据库。
 
 ## 导航结构
 
@@ -389,3 +415,6 @@ publish ─────────→ bridge/alibaba.py ─→ POST /api/alibab
 - **ERR_NGROK_3200**：通过 ngrok 域名访问时如果看到这个错误，说明后端没启动（ngrok 隧道活着但代理不到 localhost:3000）。先检查 `localhost:3000` 能否打开，若不能则运行 `scripts\start-all.bat` 启动后端
 - **首次部署需要运行数据库迁移**：`drizzle/0001_douyin_tables.sql` 创建抖店相关表（`douyin_config`、`douyin_order_sync`、`douyin_sync_log`），创建后需关闭 RLS：`ALTER TABLE douyin_config DISABLE ROW LEVEL SECURITY;`（以及另外两张表）
 - **已有商品无 shop_id**：2026-06-11 之前采集的商品没有 `shop_id` 字段，不会出现在按店铺分布图表中。重新采集一次即可
+- **销量/库存采反**：2026-06-11 修复了 `collector.py` 中抖店页面的列读取顺序（售价→库存→销量→体验分），历史已采集的数据中 `sales_count` 和 `current_stock` 相反。已执行 SQL 修复，后续采集数据正常
+- **批处理文件换行符**：`scripts/*.bat` 文件必须使用 **CRLF**（Windows 换行符），如果使用 LF（Unix 换行符）双击会闪退。修改后用 `sed -i 's/$/\r/' file.bat` 或 VSCode 切换换行符。`start ""` 启动批处理文件时用 `start "" "path\to\file.bat"`，不要用 `start "title" cmd /c "..."` 嵌套 `cmd /c`
+- **启动脚本使用 Windows 原生命令**：`start-all.bat` 和 `startup.bat` 中使用的 `find`、`tasklist` 等命令需使用 `%SystemRoot%\System32\find.exe` 等全路径，避免被 Git Bash 的 Unix `find` 截获

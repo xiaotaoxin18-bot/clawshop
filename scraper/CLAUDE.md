@@ -110,6 +110,7 @@ scraper/
     "revenue_data": null,
     "review_data": {"total_reviews": "46", "good_rate": "97.83%"}
   },
+  "shop_id": "shop1",
   "products": [
     {
       "douyin_product_id": "3813525542121112025",
@@ -117,9 +118,9 @@ scraper/
       "listed_date": "2026-05-26",
       "status": "active",
       "sale_price": 9.9,
-      "sales_count": 9731,
-      "stock": 56,
-      "category": "57%好评"
+      "sales_count": 56,      // 累计销量（正确读取第5列）
+      "stock": 9731,           // 当前库存（正确读取第4列）
+      "category": "优秀 85"
     }
   ],
   "changes": {
@@ -128,6 +129,39 @@ scraper/
   }
 }
 ```
+
+## 多店铺采集
+
+每个店铺有独立的 cookie、商品文件和数据库记录，通过 `--shop-id` 参数隔离：
+
+```bash
+# 默认店铺（无 --shop-id）
+python cli.py daily-push --api-url http://localhost:3000
+
+# 指定店铺
+python cli.py daily-push --api-url http://localhost:3000 --shop-id shop1
+```
+
+### 文件隔离规则
+
+| 用途 | 默认店铺 | 店铺 shop1 |
+|------|---------|-----------|
+| Cookie | `cookies.json` | `cookies_shop1.json` |
+| 上次采集对比 | `productslast.json` | `productslast_shop1.json` |
+| 备份文件 | `products_{日期}.json` | `products{日期}_shop1.json` |
+| 当前文件 | `products.json` | `products_shop1.json` |
+
+### 首次采集新店铺
+
+首次运行时浏览器会弹出，扫码登录该店铺的抖店后台后自动保存 cookie，后续无需重复扫码。
+
+## 修复记录
+
+### 2026-06-11: 修复销量/库存列读取顺序
+
+抖店商品管理页的列顺序为 **售价 → 库存 → 销量 → 体验分**，之前代码误将第4列读作"销量"、第5列读作"库存"，导致采集的数据正好相反。
+
+修复：`collector.py` 中交换 td[3] 和 td[4] 的读取映射。
 
 ## 关联项目
 

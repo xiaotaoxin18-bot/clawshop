@@ -51,12 +51,11 @@ class ProductCollector:
                         const c = r.querySelectorAll('td');
                         return c.length >= 2 ? c[1].innerText.trim().split('\\n')[0].trim() : '';
                     })();
-                    // 售价在第 3 个 td，销量在第 4 个 td，库存可能在后续 td
+                    // 抖店列顺序: 售价 → 库存 → 销量 → 体验分
                     const cells = r.querySelectorAll('td');
                     const priceText = cells.length >= 3 ? cells[2].innerText.trim() : '';
-                    const saleText = cells.length >= 4 ? cells[3].innerText.trim() : '';
-                    // 尝试从各行提取库存数字
-                    const stockText = cells.length >= 5 ? cells[4].innerText.trim() : '';
+                    const stockText = cells.length >= 4 ? cells[3].innerText.trim() : '';
+                    const saleText = cells.length >= 5 ? cells[4].innerText.trim() : '';
                     const catText = cells.length >= 6 ? cells[5].innerText.trim() : '';
                     // 取价格中的数字（如有区间取最低价）
                     const priceMatch = priceText.match(/(\\d+\\.?\\d*)/);

@@ -6,4 +6,6 @@ set SUDA_DATABASE_URL=postgresql://appuser:app123456@localhost:5432/inventory_db
 set FORCE_AUTHN_INNERAPI_DOMAIN=localhost:3000
 set NODE_ENV=production
 
-node dist/server/main.js
+echo [%date% %time%] Starting backend... >> "%~dp0..\backend\node_out.log"
+node dist/server/main.js >> "%~dp0..\backend\node_out.log" 2>> "%~dp0..\backend\node_err.log"
+echo [%date% %time%] Backend exited with code %ERRORLEVEL% >> "%~dp0..\backend\node_out.log"
