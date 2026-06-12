@@ -78,15 +78,18 @@ if defined NODE_STARTED (
 )
 echo.
 
-:: 3. 启动 ngrok 公网隧道
+:: 3. 启动 ngrok 公网隧道（完全隐藏后台运行）
 echo Step 3/3 - 启动 ngrok 公网隧道...
-if not "%NGROK_PATH%"=="" (
-    start /MIN "" cmd /c "%NGROK_PATH% http 3000"
-) else if exist "D:\ngrok\ngrok.exe" (
-    start /MIN "" cmd /c "D:\ngrok\ngrok.exe http 3000"
-) else (
-    start /MIN "" cmd /c "ngrok http 3000"
-)
+if not "%NGROK_PATH%"=="" goto NGOK_PATH_SET
+if exist "D:\ngrok\ngrok.exe" goto NGOK_DEFAULT
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "ngrok http 3000"
+goto NGOK_DONE
+:NGOK_PATH_SET
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%NGROK_PATH% http 3000"
+goto NGOK_DONE
+:NGOK_DEFAULT
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "D:\ngrok\ngrok.exe http 3000"
+:NGOK_DONE
 echo   * ngrok 已启动 (查看地址: http://127.0.0.1:4040)
 echo.
 

@@ -50,11 +50,14 @@ if not defined NODE_STARTED (
     echo [WARN] 后端可能未正常启动，查看日志: %PROJECT_ROOT%\backend\node_err.log
 )
 
-rem ---- 3. 启动 ngrok 隧道（指向后端 3000 端口） ----
-if not "%NGROK_PATH%"=="" (
-    start /MIN "" cmd /c "%NGROK_PATH% http 3000"
-) else if exist "D:\ngrok\ngrok.exe" (
-    start /MIN "" cmd /c "D:\ngrok\ngrok.exe http 3000"
-) else (
-    start /MIN "" cmd /c "ngrok http 3000"
-)
+rem ---- 3. 启动 ngrok 隧道（完全隐藏后台运行） ----
+if not "%NGROK_PATH%"=="" goto NG_PATH_SET
+if exist "D:\ngrok\ngrok.exe" goto NG_DEFAULT
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "ngrok http 3000"
+goto NG_DONE
+:NG_PATH_SET
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%NGROK_PATH% http 3000"
+goto NG_DONE
+:NG_DEFAULT
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "D:\ngrok\ngrok.exe http 3000"
+:NG_DONE
