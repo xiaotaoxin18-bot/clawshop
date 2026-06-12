@@ -80,12 +80,6 @@ scraper/
 ├── cookies.json            # 登录态 cookie 备份（自动生成）
 ├── products.json           # 最近一次采集结果
 ├── last_products.json      # 上次采集结果（用于对比变化）
-├── bridge/                 # 1688 选品铺货桥接模块（已实现 Phase 1）
-│   ├── __init__.py          # 包入口
-│   ├── alibaba.py           # 封装 1688-shopkeeper CLI 调用
-│   ├── sync.py              # 铺货结果同步到 backend API
-│   ├── cli.py               # 桥接模块统一入口
-│   └── start-hidden.vbs     # Windows 隐藏启动辅助脚本
 ├── edge_profile/           # 浏览器登录态（自动生成）
 ├── douyin_operator/        # Python 包
 │   ├── browser.py          # Playwright 浏览器管理
@@ -170,86 +164,6 @@ python cli.py daily-push --api-url http://localhost:3000 --shop-id shop1
 - `D:\clawshop\backend` — NestJS 全栈项目（数据库 + API + 前端）
 - `D:\clawshop\backend\server\modules\douyin\` — 后端抖音模块
 - `D:\clawshop\backend\client\src\pages\DouyinPage\` — 前端每日快照页
-
-## 1688 选品铺货桥接（bridge/）
-
-通过 subprocess 调用 [1688-shopkeeper](https://github.com/next-1688/1688-shopkeeper) CLI，实现 1688 选品、铺货并同步到 clawshop。
-
-### 前置安装
-
-```bash
-# 1. 克隆 1688-shopkeeper
-git clone https://github.com/next-1688/1688-shopkeeper.git
-
-# 2. 设置环境变量
-set ALI_1688_PATH=D:\path\to\1688-shopkeeper
-set ALI_1688_AK=your_ak_from_1688_app
-
-# 3. 配置 AK（首次）
-python -m bridge.cli configure YOUR_AK
-```
-
-### 模块结构
-
-| 文件 | 职责 |
-|------|------|
-| `alibaba.py` | 调用 1688-shopkeeper CLI（search/publish/shops/etc.），解析 JSON |
-| `sync.py` | 将铺货/搜索结果 POST 到 backend API + 本地 JSON 备份 |
-| `cli.py` | 统一命令行入口 |
-
-### CLI 命令
-
-```bash
-# 检查配置
-python -m bridge.cli check
-
-# 搜索商品
-python -m bridge.cli search --query "夏季连衣裙" --channel douyin --count 20
-python -m bridge.cli search --query "大码女装" --channel douyin --sync   # 同步到后端
-
-# 商品详情
-python -m bridge.cli detail --item-ids "991122553819,894138137003"
-python -m bridge.cli detail --item-ids "991122553819" --sync
-
-# 铺货
-python -m bridge.cli shops                             # 查看绑定店铺
-python -m bridge.cli publish --shop-code CODE --data-id ID
-python -m bridge.cli publish --shop-code CODE --data-id ID --sync  # 铺货+同步到后端
-
-# 商机与趋势
-python -m bridge.cli opportunities                     # 商机热榜
-python -m bridge.cli trend --query "大码女装"           # 趋势洞察
-
-# 日报
-python -m bridge.cli shop-daily                        # 店铺经营日报
-
-# 全局选项
-python -m bridge.cli search ... --api-url http://localhost:3000   # 指定后端地址
-python -m bridge.cli search ... --json                            # JSON 输出
-python -m bridge.cli search ... --no-local                        # 不存本地备份
-```
-
-### 后端 API（需要 Phase 2 实现）
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/alibaba/search/sync` | 同步搜索结果 |
-| POST | `/api/alibaba/publish-callback` | 铺货成功回调（自动入库） |
-| POST | `/api/alibaba/product-detail/sync` | 同步商品详情 |
-
-未实现后端 API 时，数据会保存到 `bridge_data/` 目录。
-
-### 数据流
-
-```
-1688-shopkeeper CLI             bridge/cli.py               clawshop backend
-═══════════════════             ═══════════════              ════════════════
-search ──────────→ alibaba.search() ─→ sync_search_results() ─→ POST /api/alibaba/search/sync
-publish ─────────→ alibaba.publish() ─→ sync_publish() ───────→ POST /api/alibaba/publish-callback
-                                                                  → product 表（新增商品）
-                                                                  → inbound_record（入库）
-                                                                  → douyin_daily_snapshot（快照）
-```
 
 ## 导航栏
 
