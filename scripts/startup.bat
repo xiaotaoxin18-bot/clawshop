@@ -52,9 +52,9 @@ if not defined NODE_STARTED (
 
 rem ---- 3. 启动 ngrok 隧道（指向后端 3000 端口） ----
 if not "%NGROK_PATH%"=="" (
-    start "" cmd /c "%NGROK_PATH% http 3000"
+    start /MIN "" cmd /c "%NGROK_PATH% http 3000"
 ) else if exist "D:\ngrok\ngrok.exe" (
-    start "" cmd /c "D:\ngrok\ngrok.exe http 3000"
+    start /MIN "" cmd /c "D:\ngrok\ngrok.exe http 3000"
 ) else (
-    start "" cmd /c "ngrok http 3000"
+    start /MIN "" cmd /c "ngrok http 3000"
 )

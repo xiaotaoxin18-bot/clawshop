@@ -81,11 +81,11 @@ echo.
 :: 3. 启动 ngrok 公网隧道
 echo Step 3/3 - 启动 ngrok 公网隧道...
 if not "%NGROK_PATH%"=="" (
-    start "" cmd /c "%NGROK_PATH% http 3000"
+    start /MIN "" cmd /c "%NGROK_PATH% http 3000"
 ) else if exist "D:\ngrok\ngrok.exe" (
-    start "" cmd /c "D:\ngrok\ngrok.exe http 3000"
+    start /MIN "" cmd /c "D:\ngrok\ngrok.exe http 3000"
 ) else (
-    start "" cmd /c "ngrok http 3000"
+    start /MIN "" cmd /c "ngrok http 3000"
 )
 echo   * ngrok 已启动 (查看地址: http://127.0.0.1:4040)
 echo.
