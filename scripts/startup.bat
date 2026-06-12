@@ -35,8 +35,8 @@ if not defined PG_READY (
     echo [WARN] PostgreSQL 未在 60 秒内就绪，仍尝试启动后端...
 )
 
-rem ---- 2. 启动后端（生产模式，serve 前端+API） ----
-start "" "%PROJECT_ROOT%\scripts\start-backend.bat"
+rem ---- 2. 启动后端（完全隐藏后台运行） ----
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%PROJECT_ROOT%\scripts\start-backend.bat"
 
 rem ---- 等待后端启动（轮询进程，最多等20秒） ----
 set "NODE_STARTED="

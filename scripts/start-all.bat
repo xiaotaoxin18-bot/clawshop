@@ -58,9 +58,9 @@ echo   * PostgreSQL 已启动 (端口 5432)
 :PG_DONE
 echo.
 
-:: 2. 启动后端（生产模式，内置前端页面）
+:: 2. 启动后端（完全隐藏后台运行）
 echo Step 2/3 - 启动后端...
-start "" "%PROJECT_ROOT%\scripts\start-backend.bat"
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%PROJECT_ROOT%\scripts\start-backend.bat"
 
 rem ---- 等待后端启动（轮询进程，最多等20秒） ----
 set "NODE_STARTED="
