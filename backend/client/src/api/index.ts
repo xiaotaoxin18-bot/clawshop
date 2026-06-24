@@ -1034,6 +1034,34 @@ export async function triggerDouyinScrape(shopId?: string): Promise<{ success: b
   }
 }
 
+/** 触发抖店扫码登录 */
+export async function triggerDouyinLogin(): Promise<{ success: boolean; message: string }> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/douyin/scrape/login',
+      method: 'POST',
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('触发登录失败', error);
+    throw error;
+  }
+}
+
+/** 获取登录状态 */
+export async function getDouyinLoginStatus(): Promise<{ status: string; qr?: string }> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/douyin/scrape/login-status',
+      method: 'GET',
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('获取登录状态失败', error);
+    throw error;
+  }
+}
+
 /** 获取店铺列表 */
 export async function getShops(): Promise<{ shop_id: string; shop_name: string; created_at: string }[]> {
   try {

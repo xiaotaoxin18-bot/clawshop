@@ -29,9 +29,12 @@ import {
   Plus,
   Trash2,
   Settings2,
+  LogIn,
+  QrCode,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getDouyinLatestSnapshot, triggerDouyinScrape, getShops, addShop, deleteShop } from '@/api';
+import { getDouyinLatestSnapshot, triggerDouyinScrape, triggerDouyinLogin, getDouyinLoginStatus, getShops, addShop, deleteShop } from '@/api';
 import type { DouyinDailySnapshot, DouyinSnapshotProduct } from '@shared/api.interface';
 
 const DouyinPage: React.FC = () => {
@@ -43,6 +46,46 @@ const DouyinPage: React.FC = () => {
   const [shopName, setShopName] = useState('');
   const [shopId, setShopId] = useState('');
   const [shopDialogOpen, setShopDialogOpen] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginStatus, setLoginStatus] = useState<string>('idle');
+  const [qrImage, setQrImage] = useState<string>('');
+
+  const handleLogin = async () => {
+    try {
+      setLoginDialogOpen(true);
+      setLoginStatus('starting');
+      const result = await triggerDouyinLogin();
+      if (!result.success) {
+        toast.error(result.message);
+        setLoginDialogOpen(false);
+        return;
+      }
+      // 轮询二维码和登录状态
+      const poll = setInterval(async () => {
+        try {
+          const status = await getDouyinLoginStatus();
+          if (status.status === 'ready' && status.qr) {
+            setQrImage(status.qr);
+            setLoginStatus('ready');
+          } else if (status.status === 'done') {
+            setLoginStatus('done');
+            clearInterval(poll);
+            toast.success('抖店登录成功！');
+            setTimeout(() => setLoginDialogOpen(false), 1500);
+          } else if (status.status === 'idle') {
+            // 进程可能已退出但未登录
+            setLoginStatus('idle');
+            clearInterval(poll);
+          }
+        } catch {
+          // 忽略轮询错误
+        }
+      }, 2000);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || '触发登录失败');
+      setLoginDialogOpen(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -172,6 +215,9 @@ const DouyinPage: React.FC = () => {
               )}
               {collecting ? '采集中...' : '手动采集'}
             </Button>
+            <Button variant="outline" onClick={handleLogin}>
+              <LogIn className="w-4 h-4 mr-2" /> 登录抖店
+            </Button>
           </div>
         </div>
         <Card className="shadow-sm">
@@ -276,6 +322,9 @@ const DouyinPage: React.FC = () => {
               <Play className="w-4 h-4 mr-2" />
             )}
             {collecting ? '采集中...' : '手动采集'}
+          </Button>
+          <Button variant="outline" onClick={handleLogin}>
+            <LogIn className="w-4 h-4 mr-2" /> 登录抖店
           </Button>
         </div>
       </div>
@@ -493,6 +542,60 @@ const DouyinPage: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* 登录二维码弹窗 */}
+      <Dialog open={loginDialogOpen} onOpenChange={(open) => {
+        if (!open) setLoginDialogOpen(false);
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LogIn className="w-5 h-5" /> 登录抖店
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center py-6 space-y-4">
+            {loginStatus === 'starting' && (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">正在启动浏览器...</p>
+              </div>
+            )}
+            {loginStatus === 'ready' && qrImage && (
+              <>
+                <div className="border-2 border-dashed border-primary/30 rounded-lg p-2">
+                  <img src={qrImage} alt="登录二维码" className="w-64 h-64" />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  请使用<strong>抖店 App</strong>扫描二维码登录
+                </p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  等待扫码中...
+                </div>
+              </>
+            )}
+            {loginStatus === 'done' && (
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+                  <LogIn className="w-8 h-8 text-green-600" />
+                </div>
+                <p className="text-sm font-medium text-green-600">登录成功！Cookie 已保存</p>
+              </div>
+            )}
+            {loginStatus === 'idle' && (
+              <div className="flex flex-col items-center gap-3">
+                <XCircle className="w-8 h-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">登录进程已退出，请重试</p>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-center pb-4">
+            <Button variant="outline" onClick={() => setLoginDialogOpen(false)}>
+              关闭
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

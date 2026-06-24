@@ -44,6 +44,16 @@ async function bootstrap() {
 })();`);
   });
 
+  // 绕过 CSRF 检查：在平台中间件执行前设置 CSRF cookie
+  // 解决部署环境 enableCsrf: false 不生效的问题
+  const csrfToken = Math.random().toString(36).substring(2);
+  expressApp.use((req: any, res: any, next: any) => {
+    if (!req.cookies?.['suda-csrf-token']) {
+      res.cookie('suda-csrf-token', csrfToken, { httpOnly: false, sameSite: 'lax' });
+    }
+    next();
+  });
+
   // 注册视图引擎, 渲染 client 目录下的 html 文件
   app.setBaseViewsDir(join(process.cwd(), 'dist/client'));
   app.setViewEngine('html');

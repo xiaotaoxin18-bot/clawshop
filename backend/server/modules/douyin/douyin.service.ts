@@ -5,6 +5,7 @@ import { douyinOrderSync, douyinSyncLog, douyinDailySnapshot } from '@server/dat
 import { eq, sql, desc, and, count as drizzleCount } from 'drizzle-orm';
 import { exec } from 'child_process';
 import { join } from 'path';
+import * as fs from 'fs';
 import type {
   DouyinProductData,
   DouyinOrderData,
@@ -721,8 +722,81 @@ export class DouyinService {
       this.logger.error(`触发采集失败: ${error.message}`);
       return { success: false, message: `触发采集失败: ${error.message}` };
     }
+  /**
+   * 触发抖店扫码登录
+   * 启动 Python 采集器的 login 命令，截图二维码供前端展示
+   */
+  async triggerLogin(): Promise<{ success: boolean; message: string }> {
+    const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
+    const cmd = `cd "${scraperDir}" && xvfb-run bash run-collect.sh login`;
+
+    this.logger.log(`触发登录: ${cmd}`);
+
+    try {
+      const child = exec(cmd, {
+        cwd: scraperDir,
+        timeout: 600000,
+      });
+
+      child.stdout?.on('data', (chunk: string) => {
+        this.logger.log(`[登录] ${chunk.trim()}`);
+      });
+      child.stderr?.on('data', (chunk: string) => {
+        this.logger.warn(`[登录] ${chunk.trim()}`);
+      });
+      child.on('exit', (code: number | null) => {
+        this.logger.log(`登录进程退出, code=${code}`);
+      });
+      child.on('error', (err: Error) => {
+        this.logger.error(`登录进程启动失败: ${err.message}`);
+      });
+
+      return { success: true, message: '登录流程已启动，请稍后查看二维码' };
+    } catch (error: any) {
+      this.logger.error(`触发登录失败: ${error.message}`);
+      return { success: false, message: `触发登录失败: ${error.message}` };
+    }
+  }
+
+  /**
+   * 获取登录二维码截图（base64）
+   */
+  async getLoginQRCode(): Promise<string | null> {
+    const qrPath = '/tmp/douyin_login_qr.png';
+    try {
+      if (!fs.existsSync(qrPath)) return null;
+      const data = fs.readFileSync(qrPath);
+      return `data:image/png;base64,${data.toString('base64')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 获取登录状态
+   * - waiting_qr: 等待二维码就绪
+   * - ready: 二维码已就绪，等待扫码
+   * - done: 登录成功
+   * - idle: 无登录任务
+   */
+  async getLoginStatus(): Promise<{ status: string; qr?: string }> {
+    const readyFlag = '/tmp/douyin_login_ready';
+    const doneFlag = '/tmp/douyin_login_done';
+
+    if (fs.existsSync(doneFlag)) {
+      // 清理标记
+      try { fs.unlinkSync(doneFlag); } catch {}
+      return { status: 'done' };
+    }
+    if (fs.existsSync(readyFlag)) {
+      const qr = await this.getLoginQRCode();
+      return { status: 'ready', qr: qr || undefined };
+    }
+    // 检查是否有截图文件（截图正在生成中）
+    if (fs.existsSync('/tmp/douyin_login_qr.png')) {
+      return { status: 'waiting_qr' };
+    }
+    return { status: 'idle' };
   }
 }
-
-// Re-export for backward compatibility
 export { DouyinConfigService } from './douyin-config.service';

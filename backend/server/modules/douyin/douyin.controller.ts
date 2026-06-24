@@ -215,6 +215,22 @@ export class DouyinController {
     return this.douyinService.triggerScrape(data);
   }
 
+  /**
+   * 触发抖店扫码登录（服务器端生成二维码截图）
+   */
+  @Post('scrape/login')
+  async triggerLogin(): Promise<{ success: boolean; message: string }> {
+    return this.douyinService.triggerLogin();
+  }
+
+  /**
+   * 获取登录状态
+   */
+  @Get('scrape/login-status')
+  async getLoginStatus(): Promise<{ status: string; qr?: string }> {
+    return this.douyinService.getLoginStatus();
+  }
+
   // ==================== 统计概览 ====================
 
   /**
