@@ -54,6 +54,43 @@ async function bootstrap() {
     next();
   });
 
+  // 抖店代理 — 通过服务器代理访问抖店登录页，自动捕获 cookie
+  // 用法: /proxy/https://fxg.jinritemai.com/...
+  const httpProxy = require('http-proxy');
+  const proxy = httpProxy.createProxy({
+    changeOrigin: true,
+    cookieDomainRewrite: { '*': (req.headers.host || 'localhost:3000').split(':')[0] },
+  });
+  proxy.on('proxyRes', (proxyRes: any, req: any, res: any) => {
+    const setCookieHeaders = proxyRes.headers['set-cookie'];
+    if (setCookieHeaders && Array.isArray(setCookieHeaders)) {
+      try {
+        const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
+        const cookieFile = join(scraperDir, 'cookies.json');
+        const fs = require('fs');
+        const cookies = setCookieHeaders.map((c: string) => {
+          const [nameValue] = c.split(';');
+          const [name, ...values] = nameValue.split('=');
+          return { name, value: values.join('=') };
+        });
+        let existing: any[] = [];
+        try { existing = JSON.parse(fs.readFileSync(cookieFile, 'utf-8')); } catch {}
+        const merged = [...existing, ...cookies];
+        fs.writeFileSync(cookieFile, JSON.stringify(merged, null, 2));
+        console.log(`[Proxy] 捕获 ${cookies.length} 个 cookie`);
+      } catch(e) {}
+    }
+  });
+  expressApp.use('/proxy', (req: any, res: any) => {
+    const targetUrl = req.url.substring(1); // /https://fxg... -> https://fxg...
+    if (!targetUrl.startsWith('http')) {
+      res.redirect('https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D');
+      return;
+    }
+    const urlObj = new URL(targetUrl);
+    proxy.web(req, res, { target: urlObj.origin });
+  });
+
   // 注册视图引擎, 渲染 client 目录下的 html 文件
   app.setBaseViewsDir(join(process.cwd(), 'dist/client'));
   app.setViewEngine('html');
