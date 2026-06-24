@@ -310,6 +310,48 @@ def cmd_check_rejected(flags):
 
 
 
+def cmd_login_qr(flags):
+    """打开抖店登录页，截图二维码供前端展示，等待扫码登录"""
+    qr_path = "/tmp/douyin_login_qr.png"
+    ready_flag = "/tmp/douyin_login_ready"
+    done_flag = "/tmp/douyin_login_done"
+
+    # 清除上次标记
+    for f in [ready_flag, done_flag, qr_path]:
+        try:
+            os.remove(f)
+        except Exception:
+            pass
+
+    def cb(page, ctx, pw):
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
+        page.wait_for_load_state('load', timeout=15000)
+        time.sleep(3)  # 等待页面稳定（登录页渲染二维码）
+
+        # 截图整个页面（含二维码）
+        page.screenshot(path=qr_path, full_page=False)
+        print(f"[OK] 二维码截图已保存: {qr_path}")
+
+        # 标记截图已就绪
+        with open(ready_flag, "w") as f:
+            f.write("1")
+
+        # 等待扫码登录
+        _ensure_login(page, shop_id=flags.get("shop_id"))
+
+        # 登录成功，保存 cookie
+        _save_cookies(page.context, shop_id=flags.get("shop_id"))
+        print("[OK] 登录成功，Cookie 已保存")
+
+        # 标记登录完成
+        with open(done_flag, "w") as f:
+            f.write("1")
+        if os.path.exists(ready_flag):
+            os.remove(ready_flag)
+
+    _run_browser(flags, cb)
+
+
 def cmd_daily_push(flags):
     """全量采集 + 巡检 + 推送后端"""
     import requests
