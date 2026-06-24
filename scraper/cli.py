@@ -323,33 +323,67 @@ def cmd_login_qr(flags):
         except Exception:
             pass
 
-    def cb(page, ctx, pw):
-        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2")
-        page.wait_for_load_state('load', timeout=15000)
-        time.sleep(3)  # 等待页面稳定（登录页渲染二维码）
+    from playwright.sync_api import sync_playwright
+    import tempfile, shutil, json
 
-        # 截图整个页面（含二维码）
+    pw = sync_playwright().start()
+    tmp_dir = tempfile.mkdtemp(prefix="douyin_login_")
+
+    try:
+        ctx = pw.chromium.launch_persistent_context(
+            tmp_dir,
+            channel="chrome",
+            headless=flags.get("headless", True),
+            viewport={"width": 1280, "height": 800},
+            args=["--no-sandbox", "--no-proxy-server"],
+        )
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        page.bring_to_front()
+
+        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2", wait_until="domcontentloaded")
+        time.sleep(5)
+
+        # 尝试切换到扫码登录
+        for txt in ["扫码登录", "扫码", "二维码"]:
+            try:
+                el = page.locator(f"text={txt}").first
+                if el:
+                    el.click(timeout=3000)
+                    time.sleep(2)
+                    break
+            except:
+                continue
+
+        time.sleep(3)
         page.screenshot(path=qr_path, full_page=False)
-        print(f"[OK] 二维码截图已保存: {qr_path}")
+        size = os.path.getsize(qr_path)
+        print(f"[OK] 二维码截图已保存 ({size} bytes): {qr_path}")
 
-        # 标记截图已就绪
         with open(ready_flag, "w") as f:
             f.write("1")
 
-        # 等待扫码登录
+        # 等待登录
         _ensure_login(page, shop_id=flags.get("shop_id"))
 
-        # 登录成功，保存 cookie
-        _save_cookies(page.context, shop_id=flags.get("shop_id"))
-        print("[OK] 登录成功，Cookie 已保存")
+        # 保存 cookie
+        cookies = ctx.cookies()
+        cookie_file = _cookie_file(shop_id=flags.get("shop_id"))
+        with open(cookie_file, "w") as f:
+            json.dump(cookies, f, indent=2)
+        print(f"[OK] 登录成功，已保存 {len(cookies)} 个 cookie")
 
-        # 标记登录完成
         with open(done_flag, "w") as f:
             f.write("1")
         if os.path.exists(ready_flag):
             os.remove(ready_flag)
 
-    _run_browser(flags, cb)
+    finally:
+        try:
+            ctx.close()
+            pw.stop()
+        except:
+            pass
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def cmd_daily_push(flags):
@@ -624,6 +658,7 @@ def main():
         "delist": lambda: cmd_delist(flags, remaining[0] if remaining else ""),
         "check-rejected": lambda: cmd_check_rejected(flags),
         "daily-push": lambda: cmd_daily_push(flags),
+        "login": lambda: cmd_login_qr(flags),
     }
 
     if command in cmds:
