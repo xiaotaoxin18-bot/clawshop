@@ -54,6 +54,56 @@ async function bootstrap() {
     next();
   });
 
+  // 抖店代理 — 通过代理访问抖店登录页，自动捕获 cookie
+  // 访问 http://服务器/proxy/完整抖店URL
+  const httpProxy = require('http-proxy');
+  expressApp.use('/proxy', (req: any, res: any) => {
+    const targetUrl = req.url.substring(1);
+    if (!targetUrl) {
+      res.status(400).send('需要目标 URL，例如 /proxy/https://fxg.jinritemai.com/...');
+      return;
+    }
+    try {
+      const urlObj = new URL(targetUrl);
+      // 重置路径为目标路径
+      req.url = urlObj.pathname + (urlObj.search || '');
+
+      const proxy = httpProxy.createProxy({
+        changeOrigin: true,
+        proxyReqOptDecorator: (proxyReqOpts: any) => {
+          proxyReqOpts.headers['referer'] = urlObj.origin + '/';
+          return proxyReqOpts;
+        },
+      });
+
+      proxy.on('proxyRes', (proxyRes: any, proxyReq: any, proxyResData: any) => {
+        const setCookieHeaders = proxyRes.headers['set-cookie'];
+        if (setCookieHeaders) {
+          try {
+            const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
+            const cookieFile = join(scraperDir, 'cookies.json');
+            const fs = require('fs');
+            const cookiesArr = Array.isArray(setCookieHeaders) ? setCookieHeaders : [setCookieHeaders];
+            const cookies = cookiesArr.map((c: string) => {
+              const [nameValue] = c.split(';');
+              const [name, ...values] = nameValue.split('=');
+              return { name, value: values.join('=') };
+            });
+            let existing: any[] = [];
+            try { existing = JSON.parse(fs.readFileSync(cookieFile, 'utf-8')); } catch {}
+            const merged = [...existing, ...cookies];
+            fs.writeFileSync(cookieFile, JSON.stringify(merged, null, 2));
+            console.log(`[Proxy] 捕获 ${cookies.length} 个 cookie (共 ${merged.length} 条)`);
+          } catch(e) {}
+        }
+      });
+
+      proxy.web(req, res, { target: urlObj.origin });
+      console.log(`[Proxy] ${req.method} ${urlObj.origin}${req.url}`);
+    } catch(e: any) {
+      res.status(500).send('代理错误: ' + e.message);
+    }
+  });
 
   // 注册视图引擎, 渲染 client 目录下的 html 文件
   app.setBaseViewsDir(join(process.cwd(), 'dist/client'));
