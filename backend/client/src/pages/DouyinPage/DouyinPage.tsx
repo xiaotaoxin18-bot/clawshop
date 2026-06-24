@@ -87,6 +87,9 @@ const DouyinPage: React.FC = () => {
     }
   };
 
+  // 暴露到 window 防止 tree-shaking 删掉（构建工具误判死代码）
+  (window as any).__handleDouyinLogin = handleLogin;
+
   useEffect(() => {
     loadData();
     loadShops();
