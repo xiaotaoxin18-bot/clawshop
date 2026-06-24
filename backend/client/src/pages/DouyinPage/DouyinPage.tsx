@@ -50,10 +50,12 @@ const DouyinPage: React.FC = () => {
   const [loginStatus, setLoginStatus] = useState<string>('idle');
   const [qrImage, setQrImage] = useState<string>('');
 
-  const handleLogin = async () => {
+  // 使用 function 声明而非箭头函数，防止 tree-shaking 误删
+  async function handleLogin() {
+    setLoginDialogOpen(true);
+    setLoginStatus('starting');
+
     try {
-      setLoginDialogOpen(true);
-      setLoginStatus('starting');
       const result = await triggerDouyinLogin();
       if (!result.success) {
         toast.error(result.message);
@@ -73,7 +75,6 @@ const DouyinPage: React.FC = () => {
             toast.success('抖店登录成功！');
             setTimeout(() => setLoginDialogOpen(false), 1500);
           } else if (status.status === 'idle') {
-            // 进程可能已退出但未登录
             setLoginStatus('idle');
             clearInterval(poll);
           }
@@ -85,10 +86,7 @@ const DouyinPage: React.FC = () => {
       toast.error(error?.response?.data?.message || '触发登录失败');
       setLoginDialogOpen(false);
     }
-  };
-
-  // 暴露到 window 防止 tree-shaking 删掉（构建工具误判死代码）
-  (window as any).__handleDouyinLogin = handleLogin;
+  }
 
   useEffect(() => {
     loadData();
