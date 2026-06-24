@@ -174,7 +174,7 @@ const DouyinPage: React.FC = () => {
               )}
               {collecting ? '采集中...' : '手动采集'}
             </Button>
-            <a href="/proxy/https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank">
+            <a href="https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank">
               <Button variant="outline">
                 <LogIn className="w-4 h-4 mr-2" /> 登录抖店
               </Button>
@@ -284,7 +284,7 @@ const DouyinPage: React.FC = () => {
             )}
             {collecting ? '采集中...' : '手动采集'}
           </Button>
-            <a href="/proxy/https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank">
+            <a href="https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank">
               <Button variant="outline">
                 <LogIn className="w-4 h-4 mr-2" /> 登录抖店
               </Button>
