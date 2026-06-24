@@ -231,6 +231,14 @@ export class DouyinController {
     return this.douyinService.getLoginStatus();
   }
 
+  /**
+   * 上传 Cookie 文件到服务器
+   */
+  @Post('scrape/upload-cookie')
+  async uploadCookie(@Body() body: { cookies: any[] }): Promise<{ success: boolean; message: string }> {
+    return this.douyinService.uploadCookie(body.cookies);
+  }
+
   // ==================== 统计概览 ====================
 
   /**

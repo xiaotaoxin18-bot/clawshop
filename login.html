@@ -8,73 +8,110 @@
   body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
   .container { text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); max-width: 420px; width: 90%; }
   h2 { margin-top: 0; }
-  .qr-box { border: 2px dashed #ddd; border-radius: 12px; padding: 12px; margin: 20px auto; display: inline-block; }
-  .qr-box img { width: 280px; height: 280px; display: block; }
-  .btn { padding: 10px 24px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; }
+  .btn { padding: 10px 24px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
   .btn-primary { background: #1677ff; color: white; }
   .btn-primary:hover { background: #4096ff; }
+  .btn-success { background: #52c41a; color: white; }
+  .btn-success:hover { background: #73d13d; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .status-text { margin: 12px 0; font-size: 14px; color: #666; }
-  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #ddd; border-top-color: #1677ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  .step { text-align: left; margin: 20px 0; padding: 0; list-style: none; }
+  .step li { padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #333; display: flex; align-items: center; gap: 8px; }
+  .step li:last-child { border-bottom: none; }
+  .num { display: inline-block; width: 22px; height: 22px; background: #1677ff; color: white; border-radius: 50%; text-align: center; line-height: 22px; font-size: 12px; flex-shrink: 0; }
+  input[type="file"] { display: none; }
+  .upload-area { border: 2px dashed #ddd; border-radius: 12px; padding: 30px 20px; margin: 16px 0; cursor: pointer; transition: all 0.3s; }
+  .upload-area:hover { border-color: #1677ff; background: #f0f5ff; }
+  .upload-area.dragover { border-color: #1677ff; background: #e6f0ff; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd; border-top-color: #1677ff; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .success { color: #52c41a; font-weight: 600; font-size: 16px; }
+  .success { color: #52c41a; font-weight: 600; }
   .error { color: #ff4d4f; }
-  .hint { font-size: 13px; color: #999; margin-top: 16px; }
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🔐 登录抖店</h2>
-  <div id="status-area">
-    <p class="status-text">点击下方按钮开始登录流程</p>
-    <button class="btn btn-primary" onclick="startLogin()">开始登录</button>
+  <h2>🔐 抖店登录</h2>
+
+  <a class="btn btn-primary" href="https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank" style="margin-bottom: 8px;">
+    ① 打开抖店登录
+  </a>
+
+  <p class="status-text" style="margin: 16px 0; padding: 12px; background: #fff7e6; border-radius: 8px; font-size: 13px;">
+    扫码登录后，点下面按钮下载 Cookie 文件
+  </p>
+
+  <a class="btn btn-success" id="downloadBtn" style="margin-bottom: 20px;">
+    ② 下载 Cookie
+  </a>
+
+  <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+
+  <p class="status-text" style="font-weight: 600;">已有 Cookie 文件？直接上传到服务器</p>
+
+  <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+    <p style="font-size: 13px; color: #999; margin: 0;">点击选择 cookies.json 文件上传</p>
   </div>
+  <input type="file" id="fileInput" accept=".json">
+
+  <div id="resultArea" style="margin-top: 12px;"></div>
 </div>
+
 <script>
-let pollTimer = null;
+// 从抖店页面复制 cookie 的指引
+document.getElementById('downloadBtn').addEventListener('click', function(e) {
+  e.preventDefault();
+  document.getElementById('resultArea').innerHTML =
+    '<p class="status-text" style="padding: 12px; background: #fffbe6; border-radius: 8px;">' +
+    '请在你的本地项目中找到 <code>scraper/cookies.json</code> 文件，<br>或者按 F12 → Application → Cookies 导出。<br><br>' +
+    '或者直接打开你本地的 <code>http://localhost:3000/login.html</code> 查看已有 Cookie。</p>';
+});
 
-async function startLogin() {
-  document.getElementById('status-area').innerHTML = '<p class="status-text"><span class="spinner"></span>正在启动浏览器...</p>';
+// 文件上传
+document.getElementById('fileInput').addEventListener('change', async function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  document.getElementById('resultArea').innerHTML = '<p class="status-text"><span class="spinner"></span> 上传中...</p>';
 
   try {
-    const res = await fetch('/api/douyin/scrape/login', { method: 'POST' });
-    const data = await res.json();
-    if (!data.success) {
-      document.getElementById('status-area').innerHTML = '<p class="status-text error">启动失败：' + data.message + '</p><button class="btn btn-primary" onclick="startLogin()">重试</button>';
-      return;
-    }
-    // 开始轮询
-    pollTimer = setInterval(pollLoginStatus, 2000);
-  } catch (e) {
-    document.getElementById('status-area').innerHTML = '<p class="status-text error">请求失败，请重试</p><button class="btn btn-primary" onclick="startLogin()">重试</button>';
-  }
-}
+    const text = await file.text();
+    // 解析 JSON 验证格式
+    const cookies = JSON.parse(text);
 
-async function pollLoginStatus() {
-  try {
-    const res = await fetch('/api/douyin/scrape/login-status');
+    const res = await fetch('/api/douyin/scrape/upload-cookie', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookies }),
+    });
     const data = await res.json();
 
-    if (data.status === 'ready' && data.qr) {
-      document.getElementById('status-area').innerHTML =
-        '<div class="qr-box"><img src="' + data.qr + '" alt="二维码"/></div>' +
-        '<p class="status-text"><span class="spinner"></span>请使用 <strong>抖店 App</strong> 扫码登录</p>' +
-        '<p class="hint">扫码后页面会自动关闭</p>';
-    } else if (data.status === 'done') {
-      clearInterval(pollTimer);
-      document.getElementById('status-area').innerHTML =
-        '<p class="success">✅ 登录成功！Cookie 已保存</p>' +
-        '<p class="hint">你可以关闭此页面了</p>';
-    } else if (data.status === 'idle') {
-      clearInterval(pollTimer);
-      document.getElementById('status-area').innerHTML =
-        '<p class="status-text error">登录进程已退出</p><button class="btn btn-primary" onclick="startLogin()">重新登录</button>';
+    if (data.success) {
+      document.getElementById('resultArea').innerHTML = '<p class="status-text success">✅ Cookie 上传成功！可以开始采集了</p>';
+      document.getElementById('uploadArea').innerHTML = '<p style="font-size: 13px; color: #52c41a;">✅ Cookie 已上传</p>';
+    } else {
+      document.getElementById('resultArea').innerHTML = '<p class="status-text error">❌ 上传失败：' + data.message + '</p>';
     }
-    // 'waiting_qr' - 继续等待
   } catch (e) {
-    // 忽略轮询错误
+    document.getElementById('resultArea').innerHTML = '<p class="status-text error">❌ 文件格式错误，请上传有效的 JSON 文件</p>';
   }
-}
+});
+
+// 拖拽上传
+const uploadArea = document.getElementById('uploadArea');
+uploadArea.addEventListener('dragover', function(e) {
+  e.preventDefault();
+  this.classList.add('dragover');
+});
+uploadArea.addEventListener('dragleave', function(e) {
+  this.classList.remove('dragover');
+});
+uploadArea.addEventListener('drop', function(e) {
+  e.preventDefault();
+  this.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) document.getElementById('fileInput').files = e.dataTransfer.files;
+});
 </script>
 </body>
 </html>
