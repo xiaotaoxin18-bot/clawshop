@@ -327,7 +327,7 @@ def cmd_login_qr(flags):
     import tempfile, shutil, json
 
     pw = sync_playwright().start()
-    tmp_dir = tempfile.mkdtemp(prefix="douyin_login_")
+    tmp_dir = tempfile.mkdtemp(prefix="dy_login_")
 
     try:
         ctx = pw.chromium.launch_persistent_context(
