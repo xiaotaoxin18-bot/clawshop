@@ -340,7 +340,7 @@ def cmd_login_qr(flags):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.bring_to_front()
 
-        page.goto("https://fxg.jinritemai.com/ffa/g/list?status=2", wait_until="domcontentloaded")
+        page.goto("https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D", wait_until="domcontentloaded")
         time.sleep(5)
 
         # 尝试切换到扫码登录
