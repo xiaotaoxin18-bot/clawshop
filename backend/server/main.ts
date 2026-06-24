@@ -86,7 +86,9 @@ async function bootstrap() {
         } catch(e) {}
       }
     });
+    req.url = urlObj.pathname + (urlObj.search || '');
     p.web(req, res, { target: urlObj.origin });
+    console.log(`[Proxy] ${req.method} ${urlObj.origin}${req.url}`);
   });
 
   // 注册视图引擎, 渲染 client 目录下的 html 文件
