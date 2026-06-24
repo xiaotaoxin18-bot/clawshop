@@ -33,9 +33,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Plus, ArrowDownLeft, Search, Calendar, X, Upload, Eye, Paperclip, Image as ImageIcon, FileText, Package, FileUp, Download, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FileAttachment } from '@shared/api.interface';
-import { getProducts, getInbounds, createInbound, getInbound, getWarehouses } from '@/api';
-import type { Product, InboundRecord, InboundItem, Warehouse, InboundType } from '@shared/api.interface';
-import { InboundTypeMap } from '@shared/api.interface';
+import { getProducts, getInbounds, createInbound, getInbound, getWarehouses, getInboundTypes, createInboundType, createWarehouse } from '@/api';
+import type { Product, InboundRecord, InboundItem, Warehouse, InboundTypeConfig } from '@shared/api.interface';
 import { logger } from '@lark-apaas/client-toolkit/logger';
 import { UniversalLink } from '@lark-apaas/client-toolkit/components/UniversalLink';
 import { parseExcelFile, downloadTemplate, exportToExcel, INBOUND_TEMPLATE_HEADERS } from '@/utils/excel-import';
@@ -69,7 +68,7 @@ const InboundPage: React.FC = () => {
   const [operator, setOperator] = useState('');
   const [warehouse, setWarehouse] = useState('');
   const [remark, setRemark] = useState('');
-  const [inType, setInType] = useState<InboundType>('purchase');
+  const [inType, setInType] = useState<string>('');
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -79,6 +78,17 @@ const InboundPage: React.FC = () => {
   // Warehouse data from API
   const [warehouseOptions, setWarehouseOptions] = useState<string[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+
+  // Inbound type options from API
+  const [inboundTypeOptions, setInboundTypeOptions] = useState<InboundTypeConfig[]>([]);
+
+  // Inline creation dialogs
+  const [isNewTypeDialogOpen, setIsNewTypeDialogOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeCode, setNewTypeCode] = useState('');
+  const [isNewWarehouseDialogOpen, setIsNewWarehouseDialogOpen] = useState(false);
+  const [newWarehouseName, setNewWarehouseName] = useState('');
+  const [newWarehouseCode, setNewWarehouseCode] = useState('');
 
   // Batch import states
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -167,21 +177,21 @@ const InboundPage: React.FC = () => {
     }
   }, [currentUser]);
 
-  // Load warehouse options from API
+  // Load warehouse + inbound type options
   useEffect(() => {
     loadWarehouses();
+    loadInboundTypes();
   }, []);
 
   const loadWarehouses = async () => {
     try {
       const warehousesRes = await getWarehouses({ page: 1, pageSize: 100 });
-      const warehouses = warehousesRes.items;
-      if (warehouses.length > 0) {
-        setWarehouseOptions(warehouses.map((w) => w.name));
-        setWarehouses(warehouses);
-        // Set default warehouse
-        if (!warehouse && warehouses[0]?.name) {
-          setWarehouse(warehouses[0].name);
+      const warehousesList = warehousesRes.items;
+      if (warehousesList.length > 0) {
+        setWarehouseOptions(warehousesList.map((w) => w.name));
+        setWarehouses(warehousesList);
+        if (!warehouse && warehousesList[0]?.name) {
+          setWarehouse(warehousesList[0].name);
         }
       } else {
         setWarehouseOptions([]);
@@ -190,6 +200,20 @@ const InboundPage: React.FC = () => {
       logger.error('加载仓库列表失败', error);
       toast.error('加载仓库列表失败');
       setWarehouseOptions([]);
+    }
+  };
+
+  const loadInboundTypes = async () => {
+    try {
+      const res = await getInboundTypes();
+      const types = res.items;
+      setInboundTypeOptions(types);
+      if (types.length > 0 && !inType) {
+        setInType(types[0].code);
+      }
+    } catch (error) {
+      logger.error('加载入库类型失败', error);
+      setInboundTypeOptions([]);
     }
   };
 
@@ -365,9 +389,14 @@ const InboundPage: React.FC = () => {
     setFormItems([]);
     setWarehouse(warehouseOptions[0] || '');
     setRemark('');
-    setInType('purchase');
+    setInType(inboundTypeOptions[0]?.code || '');
     setAttachments([]);
     setQuickSearchKeyword('');
+  };
+
+  const getInboundTypeName = (code: string) => {
+    const found = inboundTypeOptions.find(t => t.code === code);
+    return found?.name || code;
   };
 
   const handleViewDetail = async (record: InboundRecord) => {
@@ -982,16 +1011,31 @@ const InboundPage: React.FC = () => {
                 <Label>
                   入库类型 <span className="text-destructive">*</span>
                 </Label>
-                <Select value={inType} onValueChange={(value) => setInType(value as InboundType)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="请选择入库类型" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(InboundTypeMap).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select value={inType} onValueChange={setInType}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder={inboundTypeOptions.length === 0 ? '暂无类型，请新建' : '请选择入库类型'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {inboundTypeOptions.map(t => (
+                        <SelectItem key={t.id} value={t.code}>{t.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setNewTypeName('');
+                      setNewTypeCode('');
+                      setIsNewTypeDialogOpen(true);
+                    }}
+                    title="新建入库类型"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* Warehouse */}
@@ -999,19 +1043,34 @@ const InboundPage: React.FC = () => {
                 <Label>
                   入库仓库 <span className="text-destructive">*</span>
                 </Label>
-                <Select value={warehouse} onValueChange={setWarehouse} disabled={warehouseOptions.length === 0}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={warehouseOptions.length === 0 ? '暂无仓库，请先去创建' : '请选择仓库'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {warehouseOptions.map(w => (
-                      <SelectItem key={w} value={w}>{w}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select value={warehouse} onValueChange={setWarehouse} disabled={warehouseOptions.length === 0}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder={warehouseOptions.length === 0 ? '暂无仓库，请先去创建' : '请选择仓库'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouseOptions.map(w => (
+                        <SelectItem key={w} value={w}>{w}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setNewWarehouseName('');
+                      setNewWarehouseCode('');
+                      setIsNewWarehouseDialogOpen(true);
+                    }}
+                    title="新建仓库"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
                 {warehouseOptions.length === 0 && (
                   <p className="text-xs text-muted-foreground">
-                    暂无仓库数据，请先去
+                    暂无仓库数据，请点击右侧 + 按钮 或前往
                     <UniversalLink
                       to="/settings/warehouses"
                       className="text-primary hover:underline ml-1"
@@ -1182,7 +1241,7 @@ const InboundPage: React.FC = () => {
                         </td>
                         <td className="py-3 px-4" onClick={() => handleViewDetail(record)}>
                           <Badge variant="outline" className="text-xs">
-                            {record.inType ? InboundTypeMap[record.inType] : '撕单入库'}
+                            {getInboundTypeName(record.inType || '')}
                           </Badge>
                         </td>
                         <td className="py-3 px-4">
@@ -1296,7 +1355,7 @@ const InboundPage: React.FC = () => {
                     <Label className="text-xs text-muted-foreground">入库类型</Label>
                     <p className="text-sm">
                       <Badge variant="outline" className="text-xs">
-                        {selectedRecord.inType ? InboundTypeMap[selectedRecord.inType] : '撕单入库'}
+                        {getInboundTypeName(selectedRecord.inType || '')}
                       </Badge>
                     </p>
                   </div>
@@ -1604,6 +1663,116 @@ const InboundPage: React.FC = () => {
                 className="bg-primary text-primary-foreground"
               >
                 确认导出
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Inbound Type Dialog */}
+      <Dialog open={isNewTypeDialogOpen} onOpenChange={setIsNewTypeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建入库类型</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>类型名称 <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="例如：退货入库"
+                value={newTypeName}
+                onChange={(e) => setNewTypeName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>类型编码 <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="例如：return_purchase"
+                value={newTypeCode}
+                onChange={(e) => setNewTypeCode(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">英文或拼音缩写，唯一标识</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setIsNewTypeDialogOpen(false)}>取消</Button>
+              <Button
+                onClick={async () => {
+                  if (!newTypeName.trim() || !newTypeCode.trim()) {
+                    toast.error('请填写类型名称和编码');
+                    return;
+                  }
+                  try {
+                    const newType = await createInboundType({
+                      name: newTypeName.trim(),
+                      code: newTypeCode.trim(),
+                    });
+                    await loadInboundTypes();
+                    setInType(newType.code);
+                    toast.success(`入库类型 "${newType.name}" 已创建`);
+                    setIsNewTypeDialogOpen(false);
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || '创建失败');
+                  }
+                }}
+                disabled={!newTypeName.trim() || !newTypeCode.trim()}
+                className="bg-primary text-primary-foreground"
+              >
+                创建
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Warehouse Dialog */}
+      <Dialog open={isNewWarehouseDialogOpen} onOpenChange={setIsNewWarehouseDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建仓库</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>仓库名称 <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="例如：广州分仓"
+                value={newWarehouseName}
+                onChange={(e) => setNewWarehouseName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>仓库编码 <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="例如：GZ"
+                value={newWarehouseCode}
+                onChange={(e) => setNewWarehouseCode(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">英文或拼音缩写，唯一标识</p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="outline" onClick={() => setIsNewWarehouseDialogOpen(false)}>取消</Button>
+              <Button
+                onClick={async () => {
+                  if (!newWarehouseName.trim() || !newWarehouseCode.trim()) {
+                    toast.error('请填写仓库名称和编码');
+                    return;
+                  }
+                  try {
+                    const newWarehouse = await createWarehouse({
+                      name: newWarehouseName.trim(),
+                      code: newWarehouseCode.trim(),
+                    });
+                    await loadWarehouses();
+                    setWarehouse(newWarehouse.name);
+                    toast.success(`仓库 "${newWarehouse.name}" 已创建`);
+                    setIsNewWarehouseDialogOpen(false);
+                  } catch (err: any) {
+                    toast.error(err.response?.data?.message || '创建失败');
+                  }
+                }}
+                disabled={!newWarehouseName.trim() || !newWarehouseCode.trim()}
+                className="bg-primary text-primary-foreground"
+              >
+                创建
               </Button>
             </div>
           </div>

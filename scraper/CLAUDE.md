@@ -153,6 +153,12 @@ python cli.py daily-push --api-url http://localhost:3000 --shop-id shop1
 
 ## 修复记录
 
+### 2026-06-15: 修复 ERR_PROXY_CONNECTION_FAILED 导致采集失败
+
+**问题**：Windows 系统开启了全局代理（127.0.0.1:7890，Clash 等工具），Playwright 启动的浏览器继承系统代理设置，如果代理服务不可用或节点无法连接抖店，页面加载报 `net::ERR_PROXY_CONNECTION_FAILED`，采集立即退出。
+
+**修复**：`cli.py` 中 `_run_browser()` 函数给 `launch_persistent_context` 传入 `args=["--no-proxy-server"]`，Chromium 浏览器完全绕过系统代理直连。
+
 ### 2026-06-11: 修复销量/库存列读取顺序
 
 抖店商品管理页的列顺序为 **售价 → 库存 → 销量 → 体验分**，之前代码误将第4列读作"销量"、第5列读作"库存"，导致采集的数据正好相反。

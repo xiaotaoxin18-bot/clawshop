@@ -150,6 +150,7 @@ def _run_browser(flags, callback):
         channel=channel,
         headless=flags.get("headless", False),
         viewport={"width": 1280, "height": 800},
+        args=["--no-proxy-server"],  # 禁用系统代理，防止 ERR_PROXY_CONNECTION_FAILED
     )
     _load_cookies(context, shop_id=shop_id)
     page = context.pages[0] if context.pages else context.new_page()

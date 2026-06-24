@@ -15,6 +15,7 @@ import { AlertModule } from './modules/alert/alert.module';
 import { EmailModule } from './modules/email/email.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { WarehouseModule } from './modules/warehouse/warehouse.module';
+import { InboundTypeModule } from './modules/inbound-type/inbound-type.module';
 import { SystemConfigModule } from './modules/system_config/system_config.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { DouyinModule } from './modules/douyin/douyin.module';
@@ -37,6 +38,7 @@ import { AnonymousRoleMiddleware } from './common/middleware/anonymous-role.midd
     EmailModule,
     AnalyticsModule,
     WarehouseModule,
+    InboundTypeModule,
     SystemConfigModule,
     NotificationModule,
     DouyinModule,

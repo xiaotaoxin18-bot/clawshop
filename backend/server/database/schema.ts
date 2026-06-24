@@ -371,6 +371,26 @@ export const warehouse = pgTable("warehouse", {
   pgPolicy("service_role_bypass_policy", { as: "permissive", for: "all", to: ["service_role_workspace_aadkeahc42wbs"] }),
 ]);
 
+export const inboundTypeConfig = pgTable("inbound_type_config", {
+  id: uuid().defaultRandom().notNull(),
+  name: varchar({ length: 255 }).notNull(),
+  code: varchar({ length: 255 }).notNull(),
+  sortOrder: integer("sort_order").default(0),
+  // System field: Creation time (auto-filled, do not modify)
+  createdAt: customTimestamptz('_created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  // System field: Creator (auto-filled, do not modify)
+  createdBy: userProfile("_created_by"),
+  // System field: Update time (auto-filled, do not modify)
+  updatedAt: customTimestamptz('_updated_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  // System field: Updater (auto-filled, do not modify)
+  updatedBy: userProfile("_updated_by"),
+}, (table) => [
+  index("idx_inbound_type_code").using("btree", table.code.asc().nullsLast().op("text_ops")),
+  pgPolicy("查看全部数据", { as: "permissive", for: "select", to: ["anon_workspace_aadkeahc42wbs", "authenticated_workspace_aadkeahc42wbs"] }),
+  pgPolicy("修改全部数据", { as: "permissive", for: "all", to: ["authenticated_workspace_aadkeahc42wbs"] }),
+  pgPolicy("service_role_bypass_policy", { as: "permissive", for: "all", to: ["service_role_workspace_aadkeahc42wbs"] }),
+]);
+
 export const issueTypeConfig = pgTable("issue_type_config", {
   id: uuid().defaultRandom().notNull(),
   name: varchar({ length: 255 }).notNull(),
@@ -590,3 +610,4 @@ export const outboundRecordTable = outboundRecord;
 export const productTable = product;
 export const systemConfigTable = systemConfig;
 export const warehouseTable = warehouse;
+export const inboundTypeConfigTable = inboundTypeConfig;

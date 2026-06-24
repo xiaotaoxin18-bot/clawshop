@@ -18,10 +18,10 @@ if not errorlevel 1 (
     ping -n 4 127.0.0.1 >nul
 )
 
-rem ---- 1. 启动 PostgreSQL ----
+rem ---- 1. 启动 PostgreSQL（隐藏启动，脱离控制台） ----
 set "PGHOME=%PROJECT_ROOT%\data\pgsql\pgsql"
 set "PATH=%PGHOME%\bin;%PATH%"
-"%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" -l "%PROJECT_ROOT%\data\pgdata\logfile" start
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%PGHOME%\bin\pg_ctl -D %PROJECT_ROOT%\data\pgdata -l %PROJECT_ROOT%\data\pgdata\logfile start"
 
 rem ---- 等待 PostgreSQL 真正就绪（轮询 pg_isready，最多 60 秒） ----
 set "PG_READY="

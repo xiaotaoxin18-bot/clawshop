@@ -41,3 +41,9 @@ INSERT INTO public.alert_record (id, product_id, product_name, alert_type, curre
 ('00000000-0000-0000-0005-000000000004', '00000000-0000-0000-0001-000000000006', '无线机械键盘', 'overstock', 200, 60, 0, 60, 'overstock', false, false, '2024-02-19T09:00:00Z', '2024-02-19T09:00:00Z'),
 ('00000000-0000-0000-0005-000000000005', '00000000-0000-0000-0001-000000000008', '蓝牙音箱', 'overstock', 300, 80, 0, 90, 'overstock', true, false, '2024-02-18T13:00:00Z', '2024-02-18T13:00:00Z')
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.inbound_type_config (id, name, code, sort_order, _created_at, _updated_at) VALUES
+('00000000-0000-0000-0006-000000000001', '采购入库', 'purchase', 1, '2024-01-01T08:00:00Z', '2024-01-01T08:00:00Z'),
+('00000000-0000-0000-0006-000000000002', '撕单入库', 'tear_order', 2, '2024-01-01T08:00:00Z', '2024-01-01T08:00:00Z'),
+('00000000-0000-0000-0006-000000000003', '盘点入库', 'inventory_check', 3, '2024-01-01T08:00:00Z', '2024-01-01T08:00:00Z')
+ON CONFLICT (id) DO NOTHING;

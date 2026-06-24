@@ -312,5 +312,6 @@ const categoryText = cells[5].innerText; // 体验分
 - **首次部署需要运行数据库迁移**：`drizzle/0001_douyin_tables.sql` 创建抖店相关表（`douyin_config`、`douyin_order_sync`、`douyin_sync_log`），创建后需关闭 RLS：`ALTER TABLE douyin_config DISABLE ROW LEVEL SECURITY;`（以及另外两张表）
 - **已有商品无 shop_id**：2026-06-11 之前采集的商品没有 `shop_id` 字段，不会出现在按店铺分布图表中。重新采集一次即可
 - **销量/库存采反**：2026-06-11 修复了 `collector.py` 中抖店页面的列读取顺序（售价→库存→销量→体验分），历史已采集的数据中 `sales_count` 和 `current_stock` 相反。已执行 SQL 修复，后续采集数据正常
+- **ERR_PROXY_CONNECTION_FAILED 采集闪退**：2026-06-15 修复。Windows 系统开启全局代理（Clash 等）时，Playwright 浏览器继承系统代理设置，如果代理不通则报 `net::ERR_PROXY_CONNECTION_FAILED`，采集器立即退出。`cli.py` 中 `_run_browser()` 加入 `args=["--no-proxy-server"]`，Chromium 绕过系统代理直连。
 - **批处理文件换行符**：`scripts/*.bat` 文件必须使用 **CRLF**（Windows 换行符），如果使用 LF（Unix 换行符）双击会闪退。修改后用 `sed -i 's/$/\r/' file.bat` 或 VSCode 切换换行符。`start ""` 启动批处理文件时用 `start "" "path\to\file.bat"`，不要用 `start "title" cmd /c "..."` 嵌套 `cmd /c`
 - **启动脚本使用 Windows 原生命令**：`start-all.bat` 和 `startup.bat` 中使用的 `find`、`tasklist` 等命令需使用 `%SystemRoot%\System32\find.exe` 等全路径，避免被 Git Bash 的 Unix `find` 截获

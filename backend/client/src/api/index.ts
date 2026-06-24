@@ -16,6 +16,9 @@ import type {
   InboundListParams,
   InboundListResponse,
   InboundRecord,
+  InboundTypeConfig,
+  CreateInboundTypeRequest,
+  UpdateInboundTypeRequest,
   CreateOutboundRequest,
   UpdateOutboundRequest,
   OutboundListParams,
@@ -561,6 +564,35 @@ export async function createWarehouse(data: CreateWarehouseRequest): Promise<War
     return response.data;
   } catch (error) {
     logger.error('创建仓库失败', error);
+    throw error;
+  }
+}
+
+// ==================== 入库类型管理 API ====================
+
+export async function getInboundTypes(): Promise<{ items: InboundTypeConfig[] }> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/inbound-types',
+      method: 'GET',
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('获取入库类型列表失败', error);
+    throw error;
+  }
+}
+
+export async function createInboundType(data: CreateInboundTypeRequest): Promise<InboundTypeConfig> {
+  try {
+    const response = await axiosForBackend({
+      url: '/api/inbound-types',
+      method: 'POST',
+      data,
+    });
+    return response.data;
+  } catch (error) {
+    logger.error('创建入库类型失败', error);
     throw error;
   }
 }

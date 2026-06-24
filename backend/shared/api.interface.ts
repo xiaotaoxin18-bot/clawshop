@@ -162,15 +162,32 @@ export interface UpdateAutomationTriggerRequest {
 
 // ==================== 入库管理 ====================
 
-/** 入库类型 */
-export type InboundType = 'tear_order' | 'inventory_check' | 'purchase';
+/** 入库类型（自定义，不再固定） */
+export type InboundType = string;
 
-/** 入库类型显示名称映射 */
-export const InboundTypeMap: Record<InboundType, string> = {
-  tear_order: '撕单入库',
-  inventory_check: '盘点入库',
-  purchase: '采购入库',
-};
+/** 入库类型配置 */
+export interface InboundTypeConfig {
+  id: string;
+  name: string;
+  code: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 创建入库类型请求 */
+export interface CreateInboundTypeRequest {
+  name: string;
+  code: string;
+  sortOrder?: number;
+}
+
+/** 更新入库类型请求 */
+export interface UpdateInboundTypeRequest {
+  name?: string;
+  code?: string;
+  sortOrder?: number;
+}
 
 /** 入库货品项 */
 export interface InboundItem {

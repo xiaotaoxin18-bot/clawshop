@@ -8,24 +8,12 @@ echo  clawshop - 一键启动（生产模式）
 echo ========================================
 echo.
 
-:: 1. 启动 PostgreSQL
+:: 1. 启动 PostgreSQL（通过 start-hidden.vbs 脱离控制台，防止关窗口被杀）
 echo [1/3] 启动 PostgreSQL...
 set "PGHOME=%PROJECT_ROOT%\data\pgsql\pgsql"
 set "PATH=%PGHOME%\bin;%PATH%"
-"%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" -l "%PROJECT_ROOT%\data\pgdata\logfile" start 2>nul
 
-rem ---- 等待 PostgreSQL 真正就绪 ----
-set "PG_READY="
-for /l %%i in (1,1,30) do (
-    "%PGHOME%\bin\pg_isready" -q >nul 2>&1
-    if not errorlevel 1 set "PG_READY=1" & goto PGR_OK
-    ping -n 2 127.0.0.1 >nul
-)
-:PGR_OK
-if defined PG_READY goto PG_ALIVE
-
-rem ---- PostgreSQL 未就绪，尝试恢复 ----
-echo   * PostgreSQL 未就绪，尝试恢复...
+rem ---- 先清理残留锁文件和进程 ----
 %SystemRoot%\System32\tasklist.exe /FI "IMAGENAME eq postgres.exe" 2>nul | %SystemRoot%\System32\find.exe /I "postgres.exe" >nul
 if not errorlevel 1 (
     echo   * 发现残留 postgres 进程，清理中...
@@ -35,27 +23,24 @@ if not errorlevel 1 (
 if exist "%PROJECT_ROOT%\data\pgdata\postmaster.pid" (
     del /f "%PROJECT_ROOT%\data\pgdata\postmaster.pid" >nul 2>&1
 )
-echo   * 重新启动 PostgreSQL...
-"%PGHOME%\bin\pg_ctl" -D "%PROJECT_ROOT%\data\pgdata" -l "%PROJECT_ROOT%\data\pgdata\logfile" start 2>nul
-set "PG_RECOVERED="
-for /l %%i in (1,1,20) do (
+
+rem ---- 隐藏启动 PostgreSQL（脱离当前控制台窗口） ----
+wscript.exe //nologo "%PROJECT_ROOT%\scripts\start-hidden.vbs" "%PGHOME%\bin\pg_ctl -D %PROJECT_ROOT%\data\pgdata -l %PROJECT_ROOT%\data\pgdata\logfile start"
+
+rem ---- 轮询等待 PostgreSQL 真正就绪（最多 30 秒） ----
+set "PG_READY="
+for /l %%i in (1,1,30) do (
     "%PGHOME%\bin\pg_isready" -q >nul 2>&1
-    if not errorlevel 1 set "PG_RECOVERED=1" & goto PGR_REC
+    if not errorlevel 1 set "PG_READY=1" & goto PG_OK
     ping -n 2 127.0.0.1 >nul
 )
-:PGR_REC
-if defined PG_RECOVERED (
-    echo   * PostgreSQL 已恢复 (端口 5432)
-    goto PG_ALIVE
+:PG_OK
+if defined PG_READY (
+    echo   * PostgreSQL 已启动 (端口 5432)
+) else (
+    echo   * 无法启动 PostgreSQL，请手动检查:
+    echo     type "%PROJECT_ROOT%\data\pgdata\logfile"
 )
-echo   * 无法启动 PostgreSQL，请手动检查:
-echo     type "%PROJECT_ROOT%\data\pgdata\logfile"
-goto PG_DONE
-
-:PG_ALIVE
-echo   * PostgreSQL 已启动 (端口 5432)
-
-:PG_DONE
 echo.
 
 :: 2. 启动后端（完全隐藏后台运行）
