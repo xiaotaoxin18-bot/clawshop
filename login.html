@@ -3,94 +3,101 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>抖店登录 - Cookie 获取</title>
+<title>抖店登录</title>
 <style>
   body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-  .container { text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); max-width: 460px; width: 90%; }
+  .container { text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); max-width: 440px; width: 90%; }
   h2 { margin-top: 0; }
-  .btn { padding: 12px 28px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; text-decoration: none; margin: 4px; }
+  .btn { padding: 12px 28px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; margin: 4px; }
   .btn-primary { background: #1677ff; color: white; }
   .btn-primary:hover { background: #4096ff; }
   .btn-success { background: #52c41a; color: white; }
-  .btn-danger { background: #ff4d4f; color: white; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .step { text-align: left; margin: 20px 0; }
-  .step li { padding: 10px 0; font-size: 14px; color: #333; }
-  .step .num { display: inline-block; width: 24px; height: 24px; background: #1677ff; color: white; border-radius: 50%; text-align: center; line-height: 24px; font-size: 12px; margin-right: 8px; }
-  textarea { width: 100%; height: 120px; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-size: 12px; font-family: monospace; box-sizing: border-box; margin: 10px 0; }
-  .status { margin: 12px 0; font-size: 14px; color: #666; padding: 12px; border-radius: 8px; }
-  .status.success { background: #f6ffed; color: #52c41a; }
-  .status.error { background: #fff2f0; color: #ff4d4f; }
-  code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+  .qr-box { border: 2px dashed #ddd; border-radius: 12px; padding: 4px; margin: 16px auto; display: inline-block; max-width: 100%; overflow: hidden; }
+  .qr-box img { max-width: 320px; display: block; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #ddd; border-top-color: #1677ff; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status { margin: 12px 0; font-size: 14px; color: #666; }
+  .alt-link { font-size: 13px; color: #1677ff; cursor: pointer; text-decoration: underline; margin-top: 20px; display: inline-block; }
 </style>
 </head>
 <body>
 <div class="container">
   <h2>🔐 抖店登录</h2>
-
-  <a class="btn btn-primary" href="https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank" style="font-size:16px;">
-    打开抖店登录页
-  </a>
-
-  <ol class="step">
-    <li><span class="num">1</span>点击上方按钮打开抖店登录</li>
-    <li><span class="num">2</span>手机扫码登录</li>
-    <li><span class="num">3</span>登录后回到本页，按 <code>F12</code> → Console，粘贴以下代码：</li>
-  </ol>
-
-  <div style="background:#f6f8fa;border-radius:8px;padding:12px;text-align:left;position:relative;">
-    <pre id="codeBlock" style="margin:0;font-size:12px;white-space:pre-wrap;word-break:break-all;">fetch('http://129.28.122.183:3000/api/douyin/scrape/upload-cookie',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cookies:document.cookie.split(';').map(c=>{const [n,...v]=c.trim().split('=');return{name:n,value:v.join('='),domain:'.jinritemai.com'}})}).then(r=>r.json()).then(d=>alert(d.success?'Cookie 上传成功':'失败: '+d.message))</pre>
-    <button class="btn btn-primary" style="font-size:12px;padding:6px 12px;margin-top:8px;" onclick="navigator.clipboard.writeText(document.getElementById('codeBlock').textContent);this.textContent='已复制!'">复制代码</button>
+  <div id="app">
+    <p class="status">点击后服务器打开浏览器截图二维码，你用手机扫码</p>
+    <button class="btn btn-primary" onclick="startLogin()">开始登录</button>
+    <br><a class="alt-link" onclick="showManual()">或手动上传 Cookie</a>
   </div>
-
-  <p style="font-size:13px;color:#999;margin:16px 0 8px;">或者直接上传本地 cookies.json 文件</p>
-
-  <div style="border:2px dashed #ddd;border-radius:12px;padding:20px;cursor:pointer;" onclick="document.getElementById('fileInput').click()">
-    <p style="margin:0;font-size:13px;color:#999;">点击选择 cookies.json 文件</p>
-  </div>
-  <input type="file" id="fileInput" accept=".json" style="display:none;">
-  <div id="uploadStatus"></div>
-
-  <br>
-  <button class="btn btn-success" id="collectBtn" onclick="startCollect()" disabled>Cookie 未就绪</button>
 </div>
-
 <script>
-let cookieReady = false;
+async function startLogin() {
+  document.getElementById('app').innerHTML = '<p class="status"><span class="spinner"></span> 正在启动浏览器...</p>';
 
-document.getElementById('fileInput').addEventListener('change', async function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
+  const res = await fetch('/api/douyin/scrape/login', { method: 'POST' });
+  const data = await res.json();
+  if (!data.success) {
+    document.getElementById('app').innerHTML = '<p class="status">❌ 启动失败</p><button class="btn btn-primary" onclick="startLogin()">重试</button>';
+    return;
+  }
+
+  const poll = setInterval(async () => {
+    try {
+      const r = await fetch('/api/douyin/scrape/login-status');
+      const s = await r.json();
+      if (s.status === 'ready' && s.qr) {
+        clearInterval(poll);
+        document.getElementById('app').innerHTML =
+          '<p class="status">请用 <strong>抖店 App</strong> 扫描下方二维码</p>' +
+          '<div class="qr-box"><img src="' + s.qr + '" alt="二维码"/></div>' +
+          '<p class="status"><span class="spinner"></span> 等待扫码...</p>';
+        const donePoll = setInterval(async () => {
+          try {
+            const r2 = await fetch('/api/douyin/scrape/login-status');
+            const s2 = await r2.json();
+            if (s2.status === 'done') {
+              clearInterval(donePoll);
+              document.getElementById('app').innerHTML =
+                '<p style="color:#52c41a;font-size:18px;font-weight:600;">✅ 登录成功！</p>' +
+                '<p class="status">Cookie 已保存，去点手动采集吧</p>';
+            }
+          } catch(e) {}
+        }, 2000);
+      } else if (s.status === 'done') {
+        clearInterval(poll);
+        document.getElementById('app').innerHTML = '<p style="color:#52c41a;font-size:18px;">✅ 登录成功！Cookie 已保存</p>';
+      }
+    } catch(e) {}
+  }, 3000);
+}
+
+function showManual() {
+  document.getElementById('app').innerHTML =
+    '<p class="status">抖店页面按 F12 → Application → Cookies → <code>fxg.jinritemai.com</code></p>' +
+    '<p class="status">全选 → 右键 → Copy as JSON，粘贴到下面：</p>' +
+    '<textarea id="cookieInput" style="width:100%;height:150px;border:1px solid #ddd;border-radius:8px;padding:12px;font-size:12px;font-family:monospace;box-sizing:border-box;margin:10px 0;"></textarea>' +
+    '<button class="btn btn-primary" onclick="uploadCookie()">上传 Cookie</button>' +
+    '<div id="uploadStatus"></div>';
+}
+
+async function uploadCookie() {
+  const text = document.getElementById('cookieInput').value.trim();
+  if (!text) return;
   document.getElementById('uploadStatus').innerHTML = '<p class="status">上传中...</p>';
   try {
-    const text = await file.text();
     const cookies = JSON.parse(text);
     const res = await fetch('/api/douyin/scrape/upload-cookie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cookies}) });
     const data = await res.json();
     if (data.success) {
-      document.getElementById('uploadStatus').innerHTML = '<p class="status success">✅ Cookie 已保存！</p>';
-      cookieReady = true;
-      document.getElementById('collectBtn').textContent = '开始采集 🚀';
-      document.getElementById('collectBtn').disabled = false;
+      document.getElementById('uploadStatus').innerHTML = '<p style="color:#52c41a;">✅ 已保存！</p>';
+      const r2 = await fetch('/api/douyin/scrape/trigger', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const d2 = await r2.json();
+      if (d2.success) document.getElementById('uploadStatus').innerHTML += '<p style="color:#52c41a;">🚀 采集已启动！</p>';
     } else {
-      document.getElementById('uploadStatus').innerHTML = '<p class="status error">❌ ' + data.message + '</p>';
+      document.getElementById('uploadStatus').innerHTML = '<p style="color:#ff4d4f;">❌ ' + data.message + '</p>';
     }
   } catch(e) {
-    document.getElementById('uploadStatus').innerHTML = '<p class="status error">❌ 文件格式错误</p>';
-  }
-});
-
-async function startCollect() {
-  document.getElementById('collectBtn').disabled = true;
-  document.getElementById('collectBtn').textContent = '采集中...';
-  const res = await fetch('/api/douyin/scrape/trigger', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
-  const data = await res.json();
-  if (data.success) {
-    document.getElementById('collectBtn').textContent = '采集已启动 ✅';
-    setTimeout(() => window.close(), 2000);
-  } else {
-    document.getElementById('collectBtn').textContent = '❌ 采集失败，重试';
-    document.getElementById('collectBtn').disabled = false;
+    document.getElementById('uploadStatus').innerHTML = '<p style="color:#ff4d4f;">❌ JSON 格式错误</p>';
   }
 }
 </script>
