@@ -24,7 +24,7 @@ import { AnonymousRoleMiddleware } from './common/middleware/anonymous-role.midd
 @Module({
   imports: [
     // 平台 Module，提供平台能力
-    PlatformModule.forRoot(),
+    PlatformModule.forRoot({ enableCsrf: false }),
     // ====== @route-section: business-modules START ======
     // Place all business modules here.Do NOT add fallback modules here.
     OrderNumberModule,
