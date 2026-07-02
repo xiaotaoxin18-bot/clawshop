@@ -174,7 +174,7 @@ const DouyinPage: React.FC = () => {
               )}
               {collecting ? '采集中...' : '手动采集'}
             </Button>
-            <a href="/login.html" target="_blank">
+            <a href="/clawshop/login.html" target="_blank">
               <Button variant="outline">
                 <LogIn className="w-4 h-4 mr-2" /> 登录抖店
               </Button>
@@ -284,7 +284,7 @@ const DouyinPage: React.FC = () => {
             )}
             {collecting ? '采集中...' : '手动采集'}
           </Button>
-            <a href="/login.html" target="_blank">
+            <a href="/clawshop/login.html" target="_blank">
               <Button variant="outline">
                 <LogIn className="w-4 h-4 mr-2" /> 登录抖店
               </Button>

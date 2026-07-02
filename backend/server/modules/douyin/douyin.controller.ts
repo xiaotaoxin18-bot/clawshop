@@ -219,8 +219,8 @@ export class DouyinController {
    * 触发抖店扫码登录（服务器端生成二维码截图）
    */
   @Post('scrape/login')
-  async triggerLogin(): Promise<{ success: boolean; message: string }> {
-    return this.douyinService.triggerLogin();
+  async triggerLogin(@Body() data?: { shop_id?: string }): Promise<{ success: boolean; message: string }> {
+    return this.douyinService.triggerLogin(data?.shop_id);
   }
 
   /**
@@ -235,8 +235,8 @@ export class DouyinController {
    * 上传 Cookie 文件到服务器
    */
   @Post('scrape/upload-cookie')
-  async uploadCookie(@Body() body: { cookies: any[] }): Promise<{ success: boolean; message: string }> {
-    return this.douyinService.uploadCookie(body.cookies);
+  async uploadCookie(@Body() body: { cookies: any[]; shop_id?: string }): Promise<{ success: boolean; message: string }> {
+    return this.douyinService.uploadCookie(body.cookies, body.shop_id);
   }
 
   // ==================== 统计概览 ====================

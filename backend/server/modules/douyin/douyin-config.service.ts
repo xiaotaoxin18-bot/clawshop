@@ -1,27 +1,17 @@
-import { Injectable, Logger, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+﻿import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
-import { douyinConfig, douyinDailySnapshot } from '@server/database/douyin-schema';
-import { product, inboundRecord, outboundRecord, alertRecord } from '@server/database/schema';
 import { eq } from 'drizzle-orm';
+import { douyinConfig, douyinDailySnapshot } from '@server/database/douyin-schema';
+import { alertRecord, inboundRecord, outboundRecord, product } from '@server/database/schema';
 import type { ShopInfo } from './douyin.types';
 
-/**
- * 抖店配置读取服务
- *
- * 从 douyin_config 表中读取/写入配置项。
- * 独立于主 douyin.service 以避免循环依赖（guard → config → guard）
- */
 @Injectable()
 export class DouyinConfigService {
   private readonly logger = new Logger(DouyinConfigService.name);
+  private readonly SHOPS_CONFIG_KEY = 'shops';
 
-  constructor(
-    @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
-  ) {}
+  constructor(@Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase) {}
 
-  /**
-   * 获取配置值
-   */
   async getConfig(key: string): Promise<string> {
     const [config] = await this.db
       .select()
@@ -29,15 +19,12 @@ export class DouyinConfigService {
       .where(eq(douyinConfig.configKey, key));
 
     if (!config) {
-      throw new NotFoundException(`抖店配置 ${key} 不存在`);
+      throw new NotFoundException(`抖店配置不存在: ${key}`);
     }
 
     return config.configValue;
   }
 
-  /**
-   * 获取配置值（带默认值，不存在返回默认值）
-   */
   async getConfigOrDefault(key: string, defaultValue: string): Promise<string> {
     try {
       return await this.getConfig(key);
@@ -46,9 +33,6 @@ export class DouyinConfigService {
     }
   }
 
-  /**
-   * 设置配置值
-   */
   async setConfig(key: string, value: string, description?: string): Promise<void> {
     await this.db
       .insert(douyinConfig)
@@ -59,40 +43,28 @@ export class DouyinConfigService {
       })
       .onConflictDoUpdate({
         target: douyinConfig.configKey,
-        set: { configValue: value, description: description || null },
+        set: {
+          configValue: value,
+          description: description || null,
+        },
       });
 
     this.logger.log(`抖店配置已更新: ${key}`);
   }
 
-  /**
-   * 删除配置
-   */
   async deleteConfig(key: string): Promise<void> {
-    await this.db
-      .delete(douyinConfig)
-      .where(eq(douyinConfig.configKey, key));
+    await this.db.delete(douyinConfig).where(eq(douyinConfig.configKey, key));
   }
 
-  /**
-   * 获取所有配置
-   */
   async getAllConfigs(): Promise<{ configKey: string; configValue: string; description?: string }[]> {
     const records = await this.db.select().from(douyinConfig);
-    return records.map(r => ({
-      configKey: r.configKey,
-      configValue: r.configValue,
-      description: r.description || undefined,
+    return records.map(record => ({
+      configKey: record.configKey,
+      configValue: record.configValue,
+      description: record.description || undefined,
     }));
   }
 
-  // ==================== 店铺管理 ====================
-
-  private readonly SHOPS_CONFIG_KEY = 'shops';
-
-  /**
-   * 获取所有店铺列表
-   */
   async listShops(): Promise<ShopInfo[]> {
     try {
       const value = await this.getConfig(this.SHOPS_CONFIG_KEY);
@@ -102,48 +74,46 @@ export class DouyinConfigService {
     }
   }
 
-  /**
-   * 添加店铺
-   */
   async addShop(shopId: string, shopName?: string): Promise<ShopInfo> {
-    const shops = await this.listShops();
-    if (shops.some(s => s.shop_id === shopId)) {
-      throw new ConflictException(`店铺 ${shopId} 已存在`);
+    const trimmedId = shopId.trim();
+    if (!trimmedId) {
+      throw new ConflictException('店铺 ID 不能为空');
     }
-    const newShop: ShopInfo = {
-      shop_id: shopId,
-      shop_name: shopName || shopId,
+
+    const shops = await this.listShops();
+    if (shops.some(shop => shop.shop_id === trimmedId)) {
+      throw new ConflictException(`店铺已存在: ${trimmedId}`);
+    }
+
+    const shop: ShopInfo = {
+      shop_id: trimmedId,
+      shop_name: shopName?.trim() || trimmedId,
       created_at: new Date().toISOString(),
     };
-    shops.push(newShop);
-    await this.setConfig(this.SHOPS_CONFIG_KEY, JSON.stringify(shops), '店铺配置列表');
-    this.logger.log(`店铺已添加: ${shopId}`);
-    return newShop;
+
+    shops.push(shop);
+    await this.setConfig(this.SHOPS_CONFIG_KEY, JSON.stringify(shops), '抖店店铺列表');
+    this.logger.log(`店铺已添加: ${trimmedId}`);
+    return shop;
   }
 
-  /**
-   * 删除店铺（级联删除所有相关数据）
-   */
   async deleteShop(shopId: string): Promise<void> {
     const shops = await this.listShops();
-    const filtered = shops.filter(s => s.shop_id !== shopId);
+    const filtered = shops.filter(shop => shop.shop_id !== shopId);
+
     if (filtered.length === shops.length) {
-      throw new NotFoundException(`店铺 ${shopId} 不存在`);
+      throw new NotFoundException(`店铺不存在: ${shopId}`);
     }
 
-    // 级联删除该店铺的所有关联数据
-    const deleteOps = [
+    await Promise.all([
       this.db.delete(douyinDailySnapshot).where(eq(douyinDailySnapshot.shopId as any, shopId)),
       this.db.delete(product).where(eq(product.shopId as any, shopId)),
       this.db.delete(inboundRecord).where(eq(inboundRecord.shopId as any, shopId)),
       this.db.delete(outboundRecord).where(eq(outboundRecord.shopId as any, shopId)),
       this.db.delete(alertRecord).where(eq(alertRecord.shopId as any, shopId)),
-    ];
-    await Promise.all(deleteOps);
+    ]);
 
-    // 删除店铺配置
-    await this.setConfig(this.SHOPS_CONFIG_KEY, JSON.stringify(filtered), '店铺配置列表');
-
-    this.logger.log(`店铺已删除: ${shopId}，相关数据已清理`);
+    await this.setConfig(this.SHOPS_CONFIG_KEY, JSON.stringify(filtered), '抖店店铺列表');
+    this.logger.log(`店铺已删除: ${shopId}`);
   }
 }

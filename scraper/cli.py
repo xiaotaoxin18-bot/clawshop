@@ -103,7 +103,19 @@ def _get_channel(flags):
         return "chrome"
     if flags.get("edge"):
         return "msedge"
-    return os.environ.get("BROWSER_CHANNEL") or "msedge"
+    env_channel = (os.environ.get("BROWSER_CHANNEL") or "").strip().lower()
+    if env_channel in {"", "default", "playwright", "chromium", "none"}:
+        return "msedge" if os.name == "nt" else None
+    if env_channel == "edge":
+        return "msedge"
+    return env_channel
+
+
+def _browser_args():
+    args = ["--no-proxy-server"]
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        args.append("--no-sandbox")
+    return args
 
 
 def _load_cookies(context, shop_id=None):
@@ -145,13 +157,14 @@ def _run_browser(flags, callback):
     os.makedirs(PROFILE_DIR, exist_ok=True)
 
     shop_id = flags.get("shop_id")
-    context = pw.chromium.launch_persistent_context(
-        PROFILE_DIR,
-        channel=channel,
-        headless=flags.get("headless", False),
-        viewport={"width": 1280, "height": 800},
-        args=["--no-proxy-server"],  # 禁用系统代理，防止 ERR_PROXY_CONNECTION_FAILED
-    )
+    launch_kwargs = {
+        "headless": flags.get("headless", False),
+        "viewport": {"width": 1280, "height": 800},
+        "args": _browser_args(),
+    }
+    if channel:
+        launch_kwargs["channel"] = channel
+    context = pw.chromium.launch_persistent_context(PROFILE_DIR, **launch_kwargs)
     _load_cookies(context, shop_id=shop_id)
     page = context.pages[0] if context.pages else context.new_page()
     page.bring_to_front()
@@ -330,40 +343,69 @@ def cmd_login_qr(flags):
     tmp_dir = tempfile.mkdtemp(prefix="dy_login_")
 
     try:
-        ctx = pw.chromium.launch_persistent_context(
-            tmp_dir,
-            channel="chrome",
-            headless=flags.get("headless", True),
-            viewport={"width": 1280, "height": 800},
-            args=["--no-sandbox", "--no-proxy-server"],
-        )
+        channel = _get_channel(flags)
+        launch_kwargs = {
+            "headless": flags.get("headless", True),
+            "viewport": {"width": 1280, "height": 800},
+            "args": _browser_args(),
+        }
+        if channel:
+            launch_kwargs["channel"] = channel
+        ctx = pw.chromium.launch_persistent_context(tmp_dir, **launch_kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         page.bring_to_front()
 
         page.goto("https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D", wait_until="domcontentloaded")
         time.sleep(5)
 
-        # 尝试切换到扫码登录
-        for txt in ["扫码登录", "扫码", "二维码"]:
-            try:
-                el = page.locator(f"text={txt}").first
-                if el:
-                    el.click(timeout=3000)
-                    time.sleep(2)
-                    break
-            except:
-                continue
+        # 点击右上角二维码图标切换到扫码登录
+        try:
+            qr_icon = page.locator(".login-switcher--cell").first
+            if qr_icon:
+                qr_icon.click(timeout=5000)
+                time.sleep(3)
+                print("[OK] 已切换到扫码登录")
+        except Exception as e:
+            print("[!] 切换扫码登录失败: {}".format(e))
 
         time.sleep(3)
-        page.screenshot(path=qr_path, full_page=False)
-        size = os.path.getsize(qr_path)
-        print(f"[OK] 二维码截图已保存 ({size} bytes): {qr_path}")
+        # 直接提取二维码图片（background-image CSS）
+        import base64 as _b64
+        try:
+            _qr_el = page.query_selector(".account-center-image-content")
+            if _qr_el:
+                _bg = page.evaluate("(el) => window.getComputedStyle(el).backgroundImage", _qr_el)
+                import re as _re
+                _m = _re.search(r'data:image/[^;]+;base64,([^"\'\\s]+)', _bg)
+                if _m:
+                    with open(qr_path, "wb") as _f:
+                        _f.write(_b64.b64decode(_m.group(1)))
+                    print(f"[OK] 二维码已提取 ({os.path.getsize(qr_path)} bytes)")
+                else:
+                    raise Exception("base64 not found in background")
+            else:
+                raise Exception("QR element not found")
+        except Exception as e2:
+            print(f"[!] 提取二维码失败: {e2}，使用截图兜底")
+            page.screenshot(path=qr_path, clip={"x": 830, "y": 150, "width": 300, "height": 380})
+            print(f"[OK] 二维码截图已保存 ({os.path.getsize(qr_path)} bytes)")
 
         with open(ready_flag, "w") as f:
             f.write("1")
 
-        # 等待登录
-        _ensure_login(page, shop_id=flags.get("shop_id"))
+        # 等待用户扫码（监测 URL 离开登录页）
+        current_url = page.url
+        print("=== 请用抖店App扫描二维码 ===")
+        print("    当前URL: {}".format(current_url))
+        try:
+            page.wait_for_function(
+                "() => window.location.href.indexOf('login') < 0",
+                timeout=600000,
+            )
+            time.sleep(5)
+            print("[OK] 扫码登录成功！")
+        except Exception as e3:
+            print("[!] 等待扫码超时: {}".format(e3))
 
         # 保存 cookie
         cookies = ctx.cookies()

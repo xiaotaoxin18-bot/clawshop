@@ -1,9 +1,9 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+﻿import { Injectable, Logger, Inject } from '@nestjs/common';
 import { DRIZZLE_DATABASE, type PostgresJsDatabase } from '@lark-apaas/fullstack-nestjs-core';
 import { product, inboundRecord, outboundRecord, alertRecord } from '@server/database/schema';
 import { douyinOrderSync, douyinSyncLog, douyinDailySnapshot } from '@server/database/douyin-schema';
 import { eq, sql, desc, and, count as drizzleCount } from 'drizzle-orm';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { join } from 'path';
 import * as fs from 'fs';
 import type {
@@ -23,35 +23,38 @@ import type {
 } from './douyin.types';
 
 /**
- * 抖店核心同步服务
+ * 鎶栧簵鏍稿績鍚屾鏈嶅姟
  *
- * 职责：
- * 1. 商品/订单/库存的 upsert 同步
- * 2. 记录同步日志
- * 3. 接收浏览器采集器推送的每日快照
+ * 鑱岃矗锛?
+ * 1. 鍟嗗搧/璁㈠崟/搴撳瓨鐨?upsert 鍚屾
+ * 2. 璁板綍鍚屾鏃ュ織
+ * 3. 鎺ユ敹娴忚鍣ㄩ噰闆嗗櫒鎺ㄩ€佺殑姣忔棩蹇収
  */
 @Injectable()
 export class DouyinService {
   private readonly logger = new Logger(DouyinService.name);
+  private scrapeRunning = false;
+  private scrapeRunningLabel: string | null = null;
+  private loginChild: ReturnType<typeof spawn> | null = null;
 
   constructor(
     @Inject(DRIZZLE_DATABASE) private readonly db: PostgresJsDatabase,
   ) {}
 
-  // ==================== 商品同步 ====================
+  // ==================== 鍟嗗搧鍚屾 ====================
 
   /**
-   * 处理商品同步（抖店 → 本地）
-   * 根据 douyin_product_id 匹配本地商品，存在则更新，不存在则创建本地商品记录
+   * 澶勭悊鍟嗗搧鍚屾锛堟姈搴?鈫?鏈湴锛?
+   * 鏍规嵁 douyin_product_id 鍖归厤鏈湴鍟嗗搧锛屽瓨鍦ㄥ垯鏇存柊锛屼笉瀛樺湪鍒欏垱寤烘湰鍦板晢鍝佽褰?
    */
   async handleProductSync(
     data: DouyinProductData,
     source: SyncSource = 'webhook',
   ): Promise<SyncResultResponse> {
     try {
-      this.logger.log(`商品同步: product_id=${data.douyin_product_id}, name=${data.name}`);
+      this.logger.log(`鍟嗗搧鍚屾: product_id=${data.douyin_product_id}, name=${data.name}`);
 
-      // 检查是否已绑定本地商品
+      // 妫€鏌ユ槸鍚﹀凡缁戝畾鏈湴鍟嗗搧
       const [existing] = await this.db
         .select()
         .from(product)
@@ -60,7 +63,7 @@ export class DouyinService {
       const now = new Date();
 
       if (existing) {
-        // 更新已有商品的抖店信息
+        // 鏇存柊宸叉湁鍟嗗搧鐨勬姈搴椾俊鎭?
         await this.db
           .update(product)
           .set({
@@ -79,10 +82,10 @@ export class DouyinService {
           douyinProductId: data.douyin_product_id,
         });
 
-        return { success: true, message: '商品信息已更新' };
+        return { success: true, message: '鍟嗗搧淇℃伅宸叉洿鏂? };
       }
 
-      // 未绑定 — 创建新商品记录
+      // 鏈粦瀹?鈥?鍒涘缓鏂板晢鍝佽褰?
       const [record] = await this.db
         .insert(product)
         .values({
@@ -104,16 +107,16 @@ export class DouyinService {
         douyinProductId: data.douyin_product_id,
       });
 
-      return { success: true, message: '商品已创建', processedCount: 1 };
+      return { success: true, message: '鍟嗗搧宸插垱寤?, processedCount: 1 };
     } catch (error: any) {
-      this.logger.error(`商品同步失败: ${data.douyin_product_id}`, error?.message || error);
+      this.logger.error(`鍟嗗搧鍚屾澶辫触: ${data.douyin_product_id}`, error?.message || error);
       await this.logSync('product', 'product_created', source, null, 'failed', error?.message);
-      return { success: false, message: `商品同步失败: ${error?.message || '未知错误'}` };
+      return { success: false, message: `鍟嗗搧鍚屾澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
   /**
-   * 绑定本地商品到抖店商品
+   * 缁戝畾鏈湴鍟嗗搧鍒版姈搴楀晢鍝?
    */
   async bindProduct(
     localProductId: string,
@@ -127,7 +130,7 @@ export class DouyinService {
         .where(eq(product.id, localProductId));
 
       if (!existing) {
-        return { success: false, message: '本地商品不存在' };
+        return { success: false, message: '鏈湴鍟嗗搧涓嶅瓨鍦? };
       }
 
       await this.db
@@ -145,15 +148,15 @@ export class DouyinService {
         douyinSkuId,
       });
 
-      return { success: true, message: '绑定成功' };
+      return { success: true, message: '缁戝畾鎴愬姛' };
     } catch (error: any) {
-      this.logger.error(`绑定失败`, error?.message || error);
-      return { success: false, message: `绑定失败: ${error?.message || '未知错误'}` };
+      this.logger.error(`缁戝畾澶辫触`, error?.message || error);
+      return { success: false, message: `缁戝畾澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
   /**
-   * 解绑抖店商品
+   * 瑙ｇ粦鎶栧簵鍟嗗搧
    */
   async unbindProduct(localProductId: string): Promise<SyncResultResponse> {
     try {
@@ -171,31 +174,31 @@ export class DouyinService {
         productId: localProductId,
       });
 
-      return { success: true, message: '解绑成功' };
+      return { success: true, message: '瑙ｇ粦鎴愬姛' };
     } catch (error: any) {
-      return { success: false, message: `解绑失败: ${error?.message || '未知错误'}` };
+      return { success: false, message: `瑙ｇ粦澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
-  // ==================== 订单同步 ====================
+  // ==================== 璁㈠崟鍚屾 ====================
 
   /**
-   * 处理订单同步（抖店 → 本地）
+   * 澶勭悊璁㈠崟鍚屾锛堟姈搴?鈫?鏈湴锛?
    */
   async handleOrderSync(
     data: DouyinOrderData,
     source: SyncSource = 'webhook',
   ): Promise<SyncResultResponse> {
     try {
-      this.logger.log(`订单同步: order_id=${data.order_id}`);
+      this.logger.log(`璁㈠崟鍚屾: order_id=${data.order_id}`);
 
-      // 查找是否已存在
+      // 鏌ユ壘鏄惁宸插瓨鍦?
       const [existing] = await this.db
         .select()
         .from(douyinOrderSync)
         .where(eq(douyinOrderSync.orderId, data.order_id));
 
-      // 尝试匹配本地商品
+      // 灏濊瘯鍖归厤鏈湴鍟嗗搧
       let localProductId: string | null = null;
       if (data.product_name) {
         const [matched] = await this.db
@@ -241,25 +244,25 @@ export class DouyinService {
         localProductId,
       });
 
-      return { success: true, message: '订单同步成功', processedCount: 1 };
+      return { success: true, message: '璁㈠崟鍚屾鎴愬姛', processedCount: 1 };
     } catch (error: any) {
-      this.logger.error(`订单同步失败: ${data.order_id}`, error?.message || error);
+      this.logger.error(`璁㈠崟鍚屾澶辫触: ${data.order_id}`, error?.message || error);
       await this.logSync('order', 'order_created', source, null, 'failed', error?.message);
-      return { success: false, message: `订单同步失败: ${error?.message || '未知错误'}` };
+      return { success: false, message: `璁㈠崟鍚屾澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
-  // ==================== 库存同步 ====================
+  // ==================== 搴撳瓨鍚屾 ====================
 
   /**
-   * 处理库存变更同步（抖店 → 本地）
+   * 澶勭悊搴撳瓨鍙樻洿鍚屾锛堟姈搴?鈫?鏈湴锛?
    */
   async handleStockSync(
     data: DouyinStockData,
     source: SyncSource = 'webhook',
   ): Promise<SyncResultResponse> {
     try {
-      this.logger.log(`库存同步: product_id=${data.douyin_product_id}, quantity=${data.quantity}`);
+      this.logger.log(`搴撳瓨鍚屾: product_id=${data.douyin_product_id}, quantity=${data.quantity}`);
 
       const [existing] = await this.db
         .select()
@@ -267,8 +270,8 @@ export class DouyinService {
         .where(eq(product.douyinProductId, data.douyin_product_id));
 
       if (!existing) {
-        await this.logSync('stock', 'stock_changed', source, null, 'failed', '未找到匹配的本地商品');
-        return { success: false, message: '未找到匹配的本地商品，请先绑定' };
+        await this.logSync('stock', 'stock_changed', source, null, 'failed', '鏈壘鍒板尮閰嶇殑鏈湴鍟嗗搧');
+        return { success: false, message: '鏈壘鍒板尮閰嶇殑鏈湴鍟嗗搧锛岃鍏堢粦瀹? };
       }
 
       await this.db
@@ -285,17 +288,17 @@ export class DouyinService {
         newStock: data.quantity,
       });
 
-      return { success: true, message: '库存同步成功' };
+      return { success: true, message: '搴撳瓨鍚屾鎴愬姛' };
     } catch (error: any) {
-      this.logger.error(`库存同步失败: ${data.douyin_product_id}`, error?.message || error);
-      return { success: false, message: `库存同步失败: ${error?.message || '未知错误'}` };
+      this.logger.error(`搴撳瓨鍚屾澶辫触: ${data.douyin_product_id}`, error?.message || error);
+      return { success: false, message: `搴撳瓨鍚屾澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
-  // ==================== 同步日志 ====================
+  // ==================== 鍚屾鏃ュ織 ====================
 
   /**
-   * 记录同步日志
+   * 璁板綍鍚屾鏃ュ織
    */
   private async logSync(
     syncType: string,
@@ -315,12 +318,12 @@ export class DouyinService {
         source,
       });
     } catch (error) {
-      this.logger.error('写入同步日志失败', error);
+      this.logger.error('鍐欏叆鍚屾鏃ュ織澶辫触', error);
     }
   }
 
   /**
-   * 查询同步日志
+   * 鏌ヨ鍚屾鏃ュ織
    */
   async getSyncLogs(
     page: number = 1,
@@ -364,7 +367,7 @@ export class DouyinService {
   }
 
   /**
-   * 查询已同步的订单记录
+   * 鏌ヨ宸插悓姝ョ殑璁㈠崟璁板綍
    */
   async getOrders(
     page: number = 1,
@@ -416,17 +419,17 @@ export class DouyinService {
     };
   }
 
-  // ==================== 浏览器采集推送 ====================
+  // ==================== 娴忚鍣ㄩ噰闆嗘帹閫?====================
 
   /**
-   * 保存每日采集快照（支持多店铺隔离）
+   * 淇濆瓨姣忔棩閲囬泦蹇収锛堟敮鎸佸搴楅摵闅旂锛?
    */
   async saveDailySnapshot(payload: DailyPushPayload): Promise<SyncResultResponse> {
     try {
       const date = payload.snapshot.date;
       const shopId = payload.shop_id || '__default__';
 
-      // 按 (shop_id, snapshot_date) 唯一键查找
+      // 鎸?(shop_id, snapshot_date) 鍞竴閿煡鎵?
       const [existing] = await this.db
         .select()
         .from(douyinDailySnapshot)
@@ -457,19 +460,19 @@ export class DouyinService {
           .update(douyinDailySnapshot)
           .set(snapshotData)
           .where(eq(douyinDailySnapshot.id, existing.id));
-        this.logger.log(`快照已更新: ${date} [${shopId}]`);
+        this.logger.log(`蹇収宸叉洿鏂? ${date} [${shopId}]`);
       } else {
         await this.db.insert(douyinDailySnapshot).values(snapshotData);
-        this.logger.log(`快照已创建: ${date} [${shopId}]`);
+        this.logger.log(`蹇収宸插垱寤? ${date} [${shopId}]`);
       }
 
-      // ========== 同步商品到 product 表 + 生成业务记录 ==========
+      // ========== 鍚屾鍟嗗搧鍒?product 琛?+ 鐢熸垚涓氬姟璁板綍 ==========
       let syncedCount = 0;
       let inboundCount = 0;
       let outboundCount = 0;
       let alertCount = 0;
 
-      // 获取该店铺的上次快照（用于对比销量变化）
+      // 鑾峰彇璇ュ簵閾虹殑涓婃蹇収锛堢敤浜庡姣旈攢閲忓彉鍖栵級
       const [prevSnapshot] = await this.db
         .select()
         .from(douyinDailySnapshot)
@@ -490,7 +493,7 @@ export class DouyinService {
       if (payload.products && payload.products.length > 0) {
         for (const p of payload.products) {
           try {
-            // 按 (shop_id, douyin_product_id) 匹配商品
+            // 鎸?(shop_id, douyin_product_id) 鍖归厤鍟嗗搧
             const [existing] = await this.db
               .select()
               .from(product)
@@ -518,25 +521,25 @@ export class DouyinService {
                 })
                 .where(eq(product.id, existing.id));
 
-              // 销量增加 → 创建出库记录
+              // 閿€閲忓鍔?鈫?鍒涘缓鍑哄簱璁板綍
               const salesDiff = newSales - oldSales;
               if (salesDiff > 0) {
                 await this.db.insert(outboundRecord).values({
                   productId: existing.id,
                   quantity: salesDiff,
-                  operator: '抖店同步',
-                  warehouse: '抖店',
+                  operator: '鎶栧簵鍚屾',
+                  warehouse: '鎶栧簵',
                   shopId: shopId,
                   orderNo: `DY-${date}-${p.douyin_product_id}`,
                   items: [{ productId: existing.id, productName: p.name, quantity: salesDiff }],
                   outboundType: 'sale',
                   outType: 'sales',
-                  remark: `抖店销量同步[${shopId}]: +${salesDiff}`,
+                  remark: `鎶栧簵閿€閲忓悓姝${shopId}]: +${salesDiff}`,
                 });
                 outboundCount++;
               }
             } else {
-              // 新商品 → 创建入库记录
+              // 鏂板晢鍝?鈫?鍒涘缓鍏ュ簱璁板綍
               const [record] = await this.db
                 .insert(product)
                 .values({
@@ -557,19 +560,19 @@ export class DouyinService {
               await this.db.insert(inboundRecord).values({
                 productId: record.id,
                 quantity: p.stock || 1,
-                operator: '抖店同步',
-                warehouse: '抖店',
+                operator: '鎶栧簵鍚屾',
+                warehouse: '鎶栧簵',
                 shopId: shopId,
                 orderNo: `IN-DY-${date}-${p.douyin_product_id}`,
                 items: JSON.stringify([{ productId: record.id, productName: p.name, quantity: p.stock || 1 }]),
                 inType: 'purchase',
-                remark: `抖店新增商品同步[${shopId}]: ${p.name}`,
+                remark: `鎶栧簵鏂板鍟嗗搧鍚屾[${shopId}]: ${p.name}`,
               });
               inboundCount++;
             }
             syncedCount++;
 
-            // ========== 生成预警 ==========
+            // ========== 鐢熸垚棰勮 ==========
             const currentStock = p.stock ?? 0;
             const sales = p.sales_count ?? 0;
             if (currentStock === 0 && sales > 0) {
@@ -587,10 +590,10 @@ export class DouyinService {
               alertCount++;
             }
           } catch (err) {
-            this.logger.warn(`处理商品失败: ${p.douyin_product_id}`, err);
+            this.logger.warn(`澶勭悊鍟嗗搧澶辫触: ${p.douyin_product_id}`, err);
           }
         }
-        this.logger.log(`同步完成[${shopId}]: ${syncedCount}商品, ${inboundCount}入库, ${outboundCount}出库, ${alertCount}预警`);
+        this.logger.log(`鍚屾瀹屾垚[${shopId}]: ${syncedCount}鍟嗗搧, ${inboundCount}鍏ュ簱, ${outboundCount}鍑哄簱, ${alertCount}棰勮`);
       }
 
       await this.logSync('snapshot', 'manual_sync', 'manual', {
@@ -604,15 +607,15 @@ export class DouyinService {
         alertCreated: alertCount,
       });
 
-      return { success: true, message: `快照已保存[${shopId}]: ${date}`, processedCount: syncedCount + inboundCount + outboundCount };
+      return { success: true, message: `蹇収宸蹭繚瀛榌${shopId}]: ${date}`, processedCount: syncedCount + inboundCount + outboundCount };
     } catch (error: any) {
-      this.logger.error(`保存快照失败`, error?.message || error);
-      return { success: false, message: `保存快照失败: ${error?.message || '未知错误'}` };
+      this.logger.error(`淇濆瓨蹇収澶辫触`, error?.message || error);
+      return { success: false, message: `淇濆瓨蹇収澶辫触: ${error?.message || '鏈煡閿欒'}` };
     }
   }
 
   /**
-   * 查询快照列表
+   * 鏌ヨ蹇収鍒楄〃
    */
   async getSnapshots(
     page: number = 1,
@@ -649,7 +652,7 @@ export class DouyinService {
   }
 
   /**
-   * 获取最新快照
+   * 鑾峰彇鏈€鏂板揩鐓?
    */
   async getLatestSnapshot(): Promise<DailySnapshotResponse | null> {
     const [record] = await this.db
@@ -675,82 +678,178 @@ export class DouyinService {
   }
 
   /**
-   * 手动触发采集
-   * 通过 child_process 调用 Python 采集器，支持指定店铺
+   * 鎵嬪姩瑙﹀彂閲囬泦
+   * 閫氳繃 child_process 璋冪敤 Python 閲囬泦鍣紝鏀寔鎸囧畾搴楅摵
    */
-  async triggerScrape(data: TriggerScrapeRequest): Promise<TriggerScrapeResponse> {
-    const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
-    const apiUrl = process.env.SERVER_HOST
-      ? `http://${process.env.SERVER_HOST}:${process.env.SERVER_PORT || '3000'}`
-      : 'http://localhost:3000';
+  private resolveScraperDir(): string {
+    const candidates = [
+      process.env.SCRAPER_DIR,
+      join(process.cwd(), 'scraper'),
+      join(process.cwd(), '..', 'scraper'),
+      join(__dirname, '..', '..', '..', '..', '..', 'scraper'),
+      join(__dirname, '..', '..', '..', '..', 'scraper'),
+    ].filter((v): v is string => Boolean(v));
 
-    let cmd = `cd /d "${scraperDir}" && python cli.py daily-push --api-url ${apiUrl}`;
-    if (data.shop_id) {
-      cmd += ` --shop-id "${data.shop_id}"`;
+    for (const candidate of candidates) {
+      if (fs.existsSync(join(candidate, 'cli.py'))) {
+        return candidate;
+      }
     }
 
-    this.logger.log(`触发采集: ${cmd}`);
+    throw new Error('未找到 scraper 目录');
+  }
 
+  private resolvePythonBinary(): string {
+    return process.env.SCRAPER_PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+  }
+
+  private resolveApiUrl(): string {
+    return (
+      process.env.DOUYIN_API_URL ||
+      process.env.API_URL ||
+      `http://127.0.0.1:${process.env.SERVER_PORT || '3000'}`
+    );
+  }
+
+  private buildDailyPushArgs(shopId?: string): string[] {
+    const args = ['cli.py', 'daily-push', '--api-url', this.resolveApiUrl(), '--headless'];
+    if (shopId) {
+      args.push('--shop-id', shopId);
+    }
+    return args;
+  }
+
+  private buildLoginArgs(shopId?: string): string[] {
+    const args = ['cli.py', 'login', '--headless'];
+    if (shopId) {
+      args.push('--shop-id', shopId);
+    }
+    return args;
+  }
+
+  private async runScraperCommand(
+    label: string,
+    args: string[],
+    waitForExit: boolean,
+  ): Promise<{ pid?: number; code?: number | null }> {
+    if (this.scrapeRunning) {
+      throw new Error(`采集任务正在运行${this.scrapeRunningLabel ? `: ${this.scrapeRunningLabel}` : ''}`);
+    }
+
+    const scraperDir = this.resolveScraperDir();
+    let python = this.resolvePythonBinary();
+    // 优先使用虚拟环境的 Python（服务器部署时通过 venv 安装依赖）
+    const venvPythons = [
+      join(scraperDir, 'venv', 'bin', 'python3'),
+      join(scraperDir, 'venv', 'bin', 'python'),
+    ];
+    for (const vp of venvPythons) {
+      if (fs.existsSync(vp)) { python = vp; break; }
+    }
+    const shopIndex = args.indexOf('--shop-id');
+    const shopId = shopIndex >= 0 ? args[shopIndex + 1] : undefined;
+    const jobLabel = shopId ? `${label}:${shopId}` : label;
+
+    this.scrapeRunning = true;
+    this.scrapeRunningLabel = jobLabel;
+    this.logger.log(`启动采集任务[${jobLabel}]: ${python} ${args.join(' ')}`);
+
+    let child: ReturnType<typeof spawn>;
     try {
-      const child = exec(cmd, {
+      child = spawn(python, args, {
         cwd: scraperDir,
-        timeout: 600000, // 10 分钟超时
-        windowsHide: false, // 显示浏览器窗口
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: '1',
+        },
+        windowsHide: process.platform === 'win32',
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
+    } catch (error) {
+      this.scrapeRunning = false;
+      this.scrapeRunningLabel = null;
+      throw error;
+    }
 
-      child.stdout?.on('data', (chunk: string) => {
-        this.logger.log(`[采集器] ${chunk.trim()}`);
+    const SCRAPE_TIMEOUT = 10 * 60 * 1000; // 10 分钟超时
+    let timeoutHandle: NodeJS.Timeout | null = null;
+
+    const cleanup = () => {
+      if (timeoutHandle) { clearTimeout(timeoutHandle); timeoutHandle = null; }
+      this.scrapeRunning = false;
+      this.scrapeRunningLabel = null;
+    };
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString().trim();
+      if (text) this.logger.log(`[${jobLabel}] ${text}`);
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString().trim();
+      if (text) this.logger.warn(`[${jobLabel}] ${text}`);
+    });
+
+    if (!waitForExit) {
+      child.on('close', code => {
+        this.logger.log(`采集器退出[${jobLabel}]: code=${code}`);
+        cleanup();
       });
-      child.stderr?.on('data', (chunk: string) => {
-        this.logger.warn(`[采集器] ${chunk.trim()}`);
+      child.on('error', err => {
+        this.logger.error(`采集器启动失败[${jobLabel}]: ${err.message}`);
+        cleanup();
       });
-      child.on('close', (code: number | null) => {
-        this.logger.log(`采集器进程退出, code=${code}`);
+      return { pid: child.pid ?? undefined };
+    }
+
+    return await new Promise((resolve, reject) => {
+      // 10 分钟超时自动杀死进程
+      timeoutHandle = setTimeout(() => {
+        this.logger.warn(`采集任务超时[${jobLabel}]，正在终止`);
+        child.kill('SIGTERM');
+        // 2秒后强制杀死
+        setTimeout(() => { try { child.kill('SIGKILL'); } catch {} }, 2000);
+      }, SCRAPE_TIMEOUT);
+
+      child.on('close', code => {
+        this.logger.log(`采集器退出[${jobLabel}]: code=${code}`);
+        cleanup();
+        resolve({ pid: child.pid ?? undefined, code });
       });
-      child.on('error', (err: Error) => {
-        this.logger.error(`采集器启动失败: ${err.message}`);
+      child.on('error', err => {
+        this.logger.error(`采集器启动失败[${jobLabel}]: ${err.message}`);
+        cleanup();
+        reject(err);
       });
+    });
+  }
+
+  async triggerScrape(data: TriggerScrapeRequest): Promise<TriggerScrapeResponse> {
+    try {
+      const shopId = data.shop_id?.trim() || undefined;
+      const result = await this.runScraperCommand(
+        'manual',
+        this.buildDailyPushArgs(shopId),
+        false,
+      );
 
       return {
         success: true,
-        message: data.shop_id
-          ? `店铺 ${data.shop_id} 采集任务已启动，浏览器将自动打开`
-          : '采集任务已启动，浏览器将自动打开',
-        task_id: child.pid?.toString(),
+        message: shopId ? `店铺 ${shopId} 采集任务已启动` : '采集任务已启动',
+        task_id: result.pid?.toString(),
       };
     } catch (error: any) {
       this.logger.error(`触发采集失败: ${error.message}`);
       return { success: false, message: `触发采集失败: ${error.message}` };
     }
-  /**
-   * 触发抖店扫码登录
-   * 启动 Python 采集器的 login 命令，截图二维码供前端展示
-   */
-  async triggerLogin(): Promise<{ success: boolean; message: string }> {
-    const scraperDir = join(__dirname, '..', '..', '..', '..', '..', 'scraper');
-    const cmd = `cd "${scraperDir}" && xvfb-run bash run-collect.sh login`;
+  }
 
-    this.logger.log(`触发登录: ${cmd}`);
+  async triggerDailyPush(shopId?: string): Promise<void> {
+    await this.runScraperCommand('cron', this.buildDailyPushArgs(shopId), true);
+  }
 
+  async triggerLogin(shopId?: string): Promise<{ success: boolean; message: string }> {
     try {
-      const child = exec(cmd, {
-        cwd: scraperDir,
-        timeout: 600000,
-      });
-
-      child.stdout?.on('data', (chunk: string) => {
-        this.logger.log(`[登录] ${chunk.trim()}`);
-      });
-      child.stderr?.on('data', (chunk: string) => {
-        this.logger.warn(`[登录] ${chunk.trim()}`);
-      });
-      child.on('exit', (code: number | null) => {
-        this.logger.log(`登录进程退出, code=${code}`);
-      });
-      child.on('error', (err: Error) => {
-        this.logger.error(`登录进程启动失败: ${err.message}`);
-      });
-
+      await this.runScraperCommand('login', this.buildLoginArgs(shopId), false);
       return { success: true, message: '登录流程已启动，请稍后查看二维码' };
     } catch (error: any) {
       this.logger.error(`触发登录失败: ${error.message}`);
@@ -758,8 +857,28 @@ export class DouyinService {
     }
   }
 
+  async uploadCookie(cookies: any[], shopId?: string): Promise<{ success: boolean; message: string }> {
+    try {
+      if (!Array.isArray(cookies) || cookies.length === 0) {
+        return { success: false, message: 'Cookie 不能为空' };
+      }
+
+      const scraperDir = this.resolveScraperDir();
+      const cookiePath = join(scraperDir, shopId ? `cookies_${shopId}.json` : 'cookies.json');
+      fs.writeFileSync(cookiePath, JSON.stringify(cookies, null, 2), 'utf-8');
+
+      return {
+        success: true,
+        message: shopId ? `Cookie 已保存到店铺 ${shopId}` : 'Cookie 已保存',
+      };
+    } catch (error: any) {
+      this.logger.error(`保存 Cookie 失败: ${error.message}`);
+      return { success: false, message: `保存 Cookie 失败: ${error.message}` };
+    }
+  }
+
   /**
-   * 获取登录二维码截图（base64）
+   * 获取登录二维码（base64）
    */
   async getLoginQRCode(): Promise<string | null> {
     const qrPath = '/tmp/douyin_login_qr.png';
@@ -774,17 +893,12 @@ export class DouyinService {
 
   /**
    * 获取登录状态
-   * - waiting_qr: 等待二维码就绪
-   * - ready: 二维码已就绪，等待扫码
-   * - done: 登录成功
-   * - idle: 无登录任务
    */
   async getLoginStatus(): Promise<{ status: string; qr?: string }> {
     const readyFlag = '/tmp/douyin_login_ready';
     const doneFlag = '/tmp/douyin_login_done';
 
     if (fs.existsSync(doneFlag)) {
-      // 清理标记
       try { fs.unlinkSync(doneFlag); } catch {}
       return { status: 'done' };
     }
@@ -792,7 +906,6 @@ export class DouyinService {
       const qr = await this.getLoginQRCode();
       return { status: 'ready', qr: qr || undefined };
     }
-    // 检查是否有截图文件（截图正在生成中）
     if (fs.existsSync('/tmp/douyin_login_qr.png')) {
       return { status: 'waiting_qr' };
     }

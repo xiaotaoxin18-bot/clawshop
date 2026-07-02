@@ -29,6 +29,8 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance() as any;
   expressApp.get('/platform-config.js', (req: any, res: any) => {
     const platformData = req.__platform_data__ ?? {};
+    // 通过 Nginx 设置的 X-Forwarded-Prefix 头获取子路径，兼容反向代理部署
+    const basename = req.headers['x-forwarded-prefix'] || platformData.basename || '/';
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
     res.send(`(function(){
   window.__platform__ = ${JSON.stringify(JSON.stringify(platformData))};
@@ -37,7 +39,7 @@ async function bootstrap() {
   window.tenantId = "${platformData.tenantId || ''}";
   window.appId = "${platformData.appId || ''}";
   window.ENVIRONMENT = "${platformData.environment || 'online'}";
-  window.__BASENAME__ = "${platformData.basename || '/'}";
+  window.__BASENAME__ = "${basename}";
   if ("${platformData.appName || ''}") {
     window._appInfo = { name: "${platformData.appName || ''}", avatar: "${platformData.appAvatar || ''}", description: "${platformData.appDescription || ''}" };
   }

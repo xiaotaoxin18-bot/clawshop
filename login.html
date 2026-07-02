@@ -3,59 +3,224 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>抖店登录 - Cookie 上传</title>
+<title>抖店登录</title>
 <style>
   body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
   .container { text-align: center; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 2px 20px rgba(0,0,0,0.1); max-width: 460px; width: 90%; }
   h2 { margin-top: 0; }
+  .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #f0f0f0; }
+  .tab { flex: 1; padding: 12px; cursor: pointer; font-size: 15px; border: none; background: none; color: #666; font-weight: 500; }
+  .tab.active { color: #1677ff; border-bottom: 2px solid #1677ff; margin-bottom: -2px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
   .btn { padding: 12px 28px; border-radius: 8px; border: none; font-size: 15px; cursor: pointer; display: inline-block; text-decoration: none; margin: 4px; }
   .btn-primary { background: #1677ff; color: #fff; }
   .btn-primary:hover { background: #4096ff; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-success { background: #52c41a; color: #fff; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  textarea { width: 100%; height: 160px; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-size: 12px; font-family: monospace; box-sizing: border-box; margin: 10px 0; resize: vertical; }
-  .step { text-align: left; margin: 20px 0; list-style: none; padding: 0; }
-  .step li { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; display: flex; align-items: flex-start; gap: 10px; }
-  .step li:last-child { border-bottom: none; }
-  .num { display: inline-flex; width: 26px; height: 26px; background: #1677ff; color: #fff; border-radius: 50%; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
+  textarea { width: 100%; height: 120px; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-size: 12px; font-family: monospace; box-sizing: border-box; margin: 10px 0; resize: vertical; }
+  .step { text-align: left; margin: 16px 0; list-style: none; padding: 0; }
+  .step li { padding: 8px 0; font-size: 14px; display: flex; align-items: flex-start; gap: 10px; }
+  .num { display: inline-flex; width: 26px; height: 26px; background: #1677ff; color: #fff; border-radius: 50%; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
   .status { margin: 12px 0; font-size: 14px; padding: 12px; border-radius: 8px; }
   .success { background: #f6ffed; color: #52c41a; }
   .error { background: #fff2f0; color: #ff4d4f; }
+  .info { background: #e6f4ff; color: #1677ff; }
+  #qrImage { max-width: 280px; border: 2px solid #eee; border-radius: 8px; margin: 16px 0; display: none; }
+  .loading { display: inline-block; width: 20px; height: 20px; border: 2px solid #eee; border-top: 2px solid #1677ff; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <div class="container">
-  <h2>🔐 抖店 Cookie</h2>
+  <h2>抖店登录</h2>
 
-  <ol class="step">
-    <li><span class="num">1</span><span><a href="https://fxg.jinritemai.com/login/common?extra=%7B%22target_url%22%3A%22https%3A%2F%2Ffxg.jinritemai.com%2Fffa%2Fg%2Flist%3Fstatus%3D2%22%7D" target="_blank"><b>打开抖店</b></a> → 扫码登录</span></li>
-    <li><span class="num">2</span><span>登录后按 <b>F12</b> → <b>Application</b> → <b>Cookies</b> → <code>fxg.jinritemai.com</code> → <b>全选</b> → 右键 → <b>Copy as JSON</b></span></li>
-    <li><span class="num">3</span><span>粘贴到下面 → 点上传 → 自动采集</span></li>
-  </ol>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('qr')" id="tabQr">二维码登录</button>
+    <button class="tab" onclick="switchTab('cookie')" id="tabCookie">Cookie 上传</button>
+  </div>
 
-  <textarea id="cookieInput" placeholder="在此粘贴 Cookie JSON..."></textarea>
-  <button class="btn btn-primary" onclick="uploadCookie()">上传 Cookie 并采集</button>
-  <div id="status"></div>
+  <!-- 二维码登录 -->
+  <div class="tab-content active" id="panelQr">
+    <p style="color:#666;font-size:14px;">服务器生成二维码，用抖店App扫码即可登录</p>
+    <button class="btn btn-primary" onclick="startQrLogin()" id="btnStartQr">开始二维码登录</button>
+    <div id="qrArea" style="display:none;">
+      <div id="qrLoading" class="loading" style="display:block;margin:20px auto;"></div>
+      <img id="qrImage" src="" alt="二维码加载中..." style="max-width:360px;width:100%;border:2px solid #eee;border-radius:8px;margin:16px 0;display:none;"/>
+      <p id="qrHint" style="color:#666;font-size:13px;">请用抖店App扫描上方二维码</p>
+      <button id="btnRefreshQr" class="btn btn-primary" onclick="refreshQr()" style="display:none;margin-top:12px">🔄 刷新二维码</button>
+    </div>
+    <div id="qrStatus"></div>
+  </div>
+
+  <!-- Cookie 上传 -->
+  <div class="tab-content" id="panelCookie">
+    <ol class="step">
+      <li><span class="num">1</span><span><a href="https://fxg.jinritemai.com/login/common" target="_blank"><b>打开抖店</b></a> → 扫码登录</span></li>
+      <li><span class="num">2</span><span>F12 → Console → 输入 <code>copy(document.cookie)</code></span></li>
+      <li><span class="num">3</span><span>粘贴到下面 → 上传</span></li>
+    </ol>
+    <textarea id="cookieInput" placeholder="在此粘贴 Cookie..."></textarea>
+    <button class="btn btn-primary" onclick="uploadCookie()">上传 Cookie</button>
+    <div id="cookieStatus"></div>
+  </div>
 </div>
+
 <script>
-async function uploadCookie() {
-  const text = document.getElementById('cookieInput').value.trim();
-  if (!text) { document.getElementById('status').innerHTML = '<div class="status error">请先粘贴 Cookie</div>'; return; }
-  document.getElementById('status').innerHTML = '<div class="status">上传中...</div>';
+// ====== 页面加载时检查已有登录状态 ======
+window.addEventListener('load', async function() {
   try {
-    const cookies = JSON.parse(text);
-    const res = await fetch('/api/douyin/scrape/upload-cookie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cookies}) });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('status').innerHTML = '<div class="status success">✅ Cookie 已保存，正在采集...</div>';
-      const r2 = await fetch('/api/douyin/scrape/trigger', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
-      const d2 = await r2.json();
-      document.getElementById('status').innerHTML += '<div class="status success">' + (d2.success ? '🚀 采集已启动！' : '❌ 采集启动失败') + '</div>';
-    } else {
-      document.getElementById('status').innerHTML = '<div class="status error">❌ ' + data.message + '</div>';
+    const r = await fetch('/clawshop/api/douyin/scrape/login-status');
+    const d = await r.json();
+    if (d.status === 'ready' && d.qr) {
+      // 已有二维码在显示，直接展示
+      document.getElementById('btnStartQr').style.display = 'none';
+      document.getElementById('qrArea').style.display = 'block';
+      document.getElementById('qrLoading').style.display = 'none';
+      document.getElementById('qrImage').src = d.qr;
+      document.getElementById('qrImage').style.display = 'block';
+      document.getElementById('qrHint').style.display = 'block';
+      document.getElementById('qrStatus').innerHTML = '<div class="status info">📱 已有二维码，请用抖店App扫码登录</div>';
+      document.getElementById('btnRefreshQr').style.display = 'inline-block';
+      qrPollTimer = setInterval(pollQrStatus, 2000);
+    } else if (d.status === 'waiting_qr') {
+      document.getElementById('btnStartQr').style.display = 'none';
+      document.getElementById('qrArea').style.display = 'block';
+      document.getElementById('qrStatus').innerHTML = '<div class="status info">⏳ 正在生成二维码...</div>';
+      qrPollTimer = setInterval(pollQrStatus, 2000);
+    }
+  } catch(e) {}
+});
+
+// ====== 二维码登录 ======
+let qrPollTimer = null;
+
+async function startQrLogin() {
+  document.getElementById('btnStartQr').disabled = true;
+  document.getElementById('btnStartQr').textContent = '启动中...';
+  document.getElementById('qrStatus').innerHTML = '';
+
+  try {
+    const r = await fetch('/clawshop/api/douyin/scrape/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+    const d = await r.json();
+    if (!d.success) { showQrError(d.message); return; }
+
+    document.getElementById('btnStartQr').style.display = 'none';
+    document.getElementById('qrArea').style.display = 'block';
+    document.getElementById('qrStatus').innerHTML = '<div class="status info">⏳ 正在打开浏览器生成二维码...</div>';
+
+    // 开始轮询二维码状态
+    qrPollTimer = setInterval(pollQrStatus, 2000);
+  } catch(e) {
+    showQrError('请求失败: ' + e.message);
+  }
+}
+
+async function pollQrStatus() {
+  try {
+    const r = await fetch('/clawshop/api/douyin/scrape/login-status');
+    const d = await r.json();
+    console.log('Login status:', d);
+
+    if (d.status === 'waiting_qr') {
+      document.getElementById('qrStatus').innerHTML = '<div class="status info">⏳ 正在生成二维码...</div>';
+    } else if (d.status === 'ready' && d.qr) {
+      document.getElementById('qrLoading').style.display = 'none';
+      document.getElementById('qrImage').src = d.qr;
+      document.getElementById('qrImage').style.display = 'block';
+      document.getElementById('qrHint').style.display = 'block';
+      document.getElementById('qrStatus').innerHTML = '<div class="status info">📱 请用抖店App扫码登录</div>';
+    } else if (d.status === 'done') {
+      clearInterval(qrPollTimer);
+      document.getElementById('qrStatus').innerHTML = '<div class="status success">✅ 登录成功！Cookie 已保存</div>';
+      document.getElementById('qrHint').style.display = 'none';
+      showQrSuccess();
+    } else if (d.status === 'idle') {
+      // 还没开始
     }
   } catch(e) {
-    document.getElementById('status').innerHTML = '<div class="status error">❌ JSON 格式错误</div>';
+    console.log('Poll error:', e);
+  }
+}
+
+function showQrError(msg) {
+  clearInterval(qrPollTimer);
+  document.getElementById('qrStatus').innerHTML = '<div class="status error">❌ ' + msg + '</div>';
+  document.getElementById('btnStartQr').disabled = false;
+  document.getElementById('btnStartQr').textContent = '重新开始';
+  document.getElementById('btnStartQr').style.display = 'inline-block';
+  document.getElementById('qrArea').style.display = 'none';
+}
+
+function refreshQr() {
+  clearInterval(qrPollTimer);
+  document.getElementById('btnRefreshQr').style.display = 'none';
+  document.getElementById('qrImage').style.display = 'none';
+  document.getElementById('qrStatus').innerHTML = '<div class="status info">🔄 刷新中...</div>';
+  // 重新触发登录
+  fetch('/clawshop/api/douyin/scrape/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        document.getElementById('qrStatus').innerHTML = '<div class="status info">⏳ 正在生成新二维码...</div>';
+        qrPollTimer = setInterval(pollQrStatus, 2000);
+      } else {
+        showQrError(d.message);
+      }
+    });
+}
+
+function showQrSuccess() {
+  // 登录成功后自动触发采集
+  setTimeout(async () => {
+    const r = await fetch('/clawshop/api/douyin/scrape/trigger', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+    const d = await r.json();
+    document.getElementById('qrStatus').innerHTML += '<div class="status ' + (d.success ? 'success' : 'error') + '">' +
+      (d.success ? '🚀 采集任务已启动！' : '❌ 采集启动失败: ' + d.message) + '</div>';
+  }, 2000);
+}
+
+// ====== Cookie 上传 ======
+async function uploadCookie() {
+  const text = document.getElementById('cookieInput').value.trim();
+  if (!text) { document.getElementById('cookieStatus').innerHTML = '<div class="status error">请先粘贴 Cookie</div>'; return; }
+  document.getElementById('cookieStatus').innerHTML = '<div class="status info">⏳ 上传中...</div>';
+  try {
+    let cookies;
+    if (text.startsWith('[')) {
+      cookies = JSON.parse(text);
+    } else {
+      cookies = text.split(';').filter(Boolean).map(c => {
+        const [n, ...v] = c.trim().split('=');
+        return { name: n.trim(), value: v.join('='), domain: '.jinritemai.com' };
+      });
+    }
+    const res = await fetch('/clawshop/api/douyin/scrape/upload-cookie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({cookies}) });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('cookieStatus').innerHTML = '<div class="status success">✅ Cookie 已保存，正在采集...</div>';
+      const r2 = await fetch('/clawshop/api/douyin/scrape/trigger', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      const d2 = await r2.json();
+      document.getElementById('cookieStatus').innerHTML += '<div class="status ' + (d2.success ? 'success' : 'error') + '">' +
+        (d2.success ? '🚀 采集已启动！' : '❌ 采集启动失败: ' + d2.message) + '</div>';
+    } else {
+      document.getElementById('cookieStatus').innerHTML = '<div class="status error">❌ ' + data.message + '</div>';
+    }
+  } catch(e) {
+    document.getElementById('cookieStatus').innerHTML = '<div class="status error">❌ 格式错误</div>';
+  }
+}
+
+// ====== Tab 切换 ======
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  if (tab === 'qr') {
+    document.getElementById('tabQr').classList.add('active');
+    document.getElementById('panelQr').classList.add('active');
+  } else {
+    document.getElementById('tabCookie').classList.add('active');
+    document.getElementById('panelCookie').classList.add('active');
   }
 }
 </script>

@@ -36,6 +36,7 @@ module.exports = {
     webSocketServer: false,
   },
   output: {
+    publicPath: '/clawshop/',
     filename: '[name].js', // main.js 保持原名
     chunkFilename: 'chunks/[name].[contenthash:8].js', // 动态 chunk 放入 chunks 目录，带 hash
   },

@@ -65,8 +65,8 @@ if (idx >= 0) {
 }
 
 // 6. 插入 platform-config.js（在 main.js 前）
-const configTag = '  <script defer src="/platform-config.js"></script>\n';
-html = html.replace('<script defer src="/main.js">', configTag + '<script defer src="/main.js">');
+const configTag = '  <script defer src="/clawshop/platform-config.js"></script>\n';
+html = html.replace('<script defer src="/clawshop/main.js">', configTag + '<script defer src="/clawshop/main.js">');
 
 // 7. 清理多余空行
 html = html.replace(/\n{4,}/g, '\n\n');
